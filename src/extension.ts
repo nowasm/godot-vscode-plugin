@@ -19,9 +19,11 @@ import { GodotDebugger } from "./debugger";
 import { DebugServer } from "./dev/debug_server";
 import { FormattingProvider } from "./formatter";
 import {
+	FunctionIndexStatusBar,
 	FunctionHighlightingRuntime,
 	FunctionOriginDecorations,
 } from "./function_highlighting";
+import { HIGHLIGHT_CONFIG_PREFIX } from "./utils/extension_identity";
 import {
 	get_configuration,
 	find_file,
@@ -53,6 +55,7 @@ interface Extension {
 	semanticTokensProvider?: GDSemanticTokensProvider;
 	functionHighlightingRuntime?: FunctionHighlightingRuntime;
 	functionOriginDecorations?: FunctionOriginDecorations;
+	functionIndexStatusBar?: FunctionIndexStatusBar;
 	completionProvider?: GDCompletionItemProvider;
 	tasksProvider?: GDTaskProvider;
 	devServer?: DebugServer;
@@ -73,10 +76,7 @@ export function activate(context: vscode.ExtensionContext) {
 	globals.scenePreviewProvider = new ScenePreviewProvider(context);
 	globals.linkProvider = new GDDocumentLinkProvider(context);
 	globals.dropsProvider = new GDDocumentDropEditProvider(context);
-	globals.hoverProvider = new GDHoverProvider(
-		context,
-		globals.functionHighlightingRuntime.service,
-	);
+	globals.hoverProvider = new GDHoverProvider(context, globals.functionHighlightingRuntime.service);
 	globals.inlayProvider = new GDInlayHintsProvider(context);
 	globals.formattingProvider = new FormattingProvider(context);
 	globals.docsProvider = new GDDocumentationProvider(context);
@@ -90,10 +90,20 @@ export function activate(context: vscode.ExtensionContext) {
 		globals.functionHighlightingRuntime.service,
 		globals.functionHighlightingRuntime.onDidChange,
 	);
+	globals.functionIndexStatusBar = new FunctionIndexStatusBar(
+		globals.functionHighlightingRuntime.onDidStatusChange,
+		globals.functionHighlightingRuntime.status,
+	);
 	context.subscriptions.push(
 		globals.functionHighlightingRuntime,
 		globals.functionOriginDecorations,
+		globals.functionIndexStatusBar,
 		lsp.onStatusChanged(() => globals.functionHighlightingRuntime?.refresh()),
+		vscode.workspace.onDidChangeConfiguration((event) => {
+			if (event.affectsConfiguration(`${HIGHLIGHT_CONFIG_PREFIX}.exclude`)) {
+				void globals.functionHighlightingRuntime?.initialize();
+			}
+		}),
 	);
 	void globals.functionHighlightingRuntime.initialize();
 	// globals.completionProvider = new GDCompletionItemProvider(context);
@@ -116,6 +126,12 @@ export function activate(context: vscode.ExtensionContext) {
 		register_command("listGodotClasses", list_classes),
 		register_command("switchSceneScript", switch_scene_script),
 		register_command("getGodotPath", get_godot_path),
+		vscode.commands.registerCommand("godpartyGodotTools.functionHighlight.toggle", toggle_function_highlighting),
+		vscode.commands.registerCommand("godpartyGodotTools.functionHighlight.rebuildIndex", async () => {
+			await globals.functionHighlightingRuntime?.initialize();
+			globals.functionOriginDecorations?.refreshAll();
+			void vscode.window.showInformationMessage("GodParty function index rebuilt.");
+		}),
 	);
 
 	set_context("godotFiles", ["gdscript", "gdscene", "gdresource", "gdshader"]);
@@ -124,6 +140,13 @@ export function activate(context: vscode.ExtensionContext) {
 	get_project_version().then(async () => {
 		initial_setup();
 	});
+}
+
+async function toggle_function_highlighting(): Promise<void> {
+	const configuration = vscode.workspace.getConfiguration(HIGHLIGHT_CONFIG_PREFIX);
+	const enabled = configuration.get("enabled", true);
+	await configuration.update("enabled", !enabled, vscode.ConfigurationTarget.Workspace);
+	void vscode.window.showInformationMessage(`GodParty function highlighting ${enabled ? "disabled" : "enabled"}.`);
 }
 
 async function initial_setup() {
@@ -250,7 +273,7 @@ async function open_godot_editor_settings() {
 	const dir = get_editor_data_dir();
 	const files = fs.readdirSync(dir).filter((v) => v.endsWith(".tres"));
 
-	const ver = await get_project_version() ?? "";
+	const ver = (await get_project_version()) ?? "";
 
 	for (const file of files) {
 		if (file.includes(ver)) {

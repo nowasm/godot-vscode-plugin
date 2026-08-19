@@ -24,12 +24,7 @@ export class GDSemanticTokensProvider implements DocumentSemanticTokensProvider 
 	readonly onDidChangeSemanticTokens: Event<void> = this.changeEmitter.event;
 
 	private legend = new SemanticTokensLegend(
-		[
-			"nodePath",
-			"%",
-			"godotSystemFunction",
-			"godotProjectFunction",
-		],
+		["nodePath", "%", "godotSystemFunction", "godotProjectFunction"],
 		["test"],
 	);
 
@@ -49,9 +44,7 @@ export class GDSemanticTokensProvider implements DocumentSemanticTokensProvider 
 			this.changeEmitter,
 		);
 		if (onFunctionDataChanged) {
-			context.subscriptions.push(
-				onFunctionDataChanged(() => this.changeEmitter.fire()),
-			);
+			context.subscriptions.push(onFunctionDataChanged(() => this.changeEmitter.fire()));
 		}
 		context.subscriptions.push(
 			vscode.workspace.onDidChangeConfiguration((event) => {
@@ -67,7 +60,8 @@ export class GDSemanticTokensProvider implements DocumentSemanticTokensProvider 
 		const builder = new SemanticTokensBuilder(this.legend);
 		const text = document.getText();
 
-		const pattern = /(?<=(?:get_node|has_node|find_node|get_node_or_null|has_node_and_resource)\(\s?)(("|')((?!\2).)*\2)(?=\s?\))/g;
+		const pattern =
+			/(?<=(?:get_node|has_node|find_node|get_node_or_null|has_node_and_resource)\(\s?)(("|')((?!\2).)*\2)(?=\s?\))/g;
 		for (const match of text.matchAll(pattern)) {
 			const r = this.create_range(document, match);
 			builder.push(r, "nodePath", []);
@@ -75,9 +69,7 @@ export class GDSemanticTokensProvider implements DocumentSemanticTokensProvider 
 
 		if (
 			document.languageId === "gdscript" &&
-			vscode.workspace
-				.getConfiguration(HIGHLIGHT_CONFIG_PREFIX)
-				.get("enabled", true)
+			vscode.workspace.getConfiguration(HIGHLIGHT_CONFIG_PREFIX).get("enabled", true)
 		) {
 			try {
 				const functions = await this.functionService.analyze(
@@ -90,10 +82,7 @@ export class GDSemanticTokensProvider implements DocumentSemanticTokensProvider 
 				);
 				for (const entry of functions) {
 					builder.push(
-						new Range(
-							document.positionAt(entry.token.start),
-							document.positionAt(entry.token.end),
-						),
+						new Range(document.positionAt(entry.token.start), document.positionAt(entry.token.end)),
 						entry.tokenType,
 						[],
 					);

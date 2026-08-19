@@ -1,10 +1,6 @@
 import * as vscode from "vscode";
 
-import type {
-	DisposableLike,
-	ProjectWorkspaceAdapter,
-	WorkspaceScriptDocument,
-} from "./project_index_service";
+import type { DisposableLike, ProjectWorkspaceAdapter, WorkspaceScriptDocument } from "./project_index_service";
 
 function toDocument(document: vscode.TextDocument): WorkspaceScriptDocument {
 	return {
@@ -17,19 +13,14 @@ function toDocument(document: vscode.TextDocument): WorkspaceScriptDocument {
 export class VsCodeProjectWorkspaceAdapter implements ProjectWorkspaceAdapter {
 	async findGDScriptFiles(excludes: readonly string[]): Promise<string[]> {
 		const exclude = excludes.length > 0 ? `{${excludes.join(",")}}` : undefined;
-		return (await vscode.workspace.findFiles("**/*.gd", exclude)).map((uri) =>
-			uri.toString(),
-		);
+		return (await vscode.workspace.findFiles("**/*.gd", exclude)).map((uri) => uri.toString());
 	}
 
 	async readDocument(uri: string): Promise<WorkspaceScriptDocument> {
 		return toDocument(await vscode.workspace.openTextDocument(vscode.Uri.parse(uri)));
 	}
 
-	watch(
-		onChange: (document: WorkspaceScriptDocument) => void,
-		onDelete: (uri: string) => void,
-	): DisposableLike {
+	watch(onChange: (document: WorkspaceScriptDocument) => void, onDelete: (uri: string) => void): DisposableLike {
 		const watcher = vscode.workspace.createFileSystemWatcher("**/*.gd");
 		const updateFromUri = async (uri: vscode.Uri) => {
 			try {
@@ -51,4 +42,3 @@ export class VsCodeProjectWorkspaceAdapter implements ProjectWorkspaceAdapter {
 		);
 	}
 }
-

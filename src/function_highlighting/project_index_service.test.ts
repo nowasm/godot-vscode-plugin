@@ -83,4 +83,15 @@ suite("ProjectIndexService", () => {
 		strictEqual(index.resolveClassMethod("Changing", "newest"), undefined);
 		service.dispose();
 	});
+
+	test("uses updated exclusions on rebuild", async () => {
+		const workspace = new FakeWorkspace();
+		const service = new ProjectIndexService(new ProjectSymbolIndex(), workspace);
+		service.setExcludes(["**/.godot/**", "**/generated/**"]);
+
+		await service.initialize();
+
+		deepStrictEqual(workspace.requestedExcludes, ["**/.godot/**", "**/generated/**"]);
+		service.dispose();
+	});
 });

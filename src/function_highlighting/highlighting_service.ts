@@ -1,20 +1,11 @@
-import {
-	classifyFunction,
-	classifyFunctionWithLsp,
-	type FunctionClassification,
-} from "./classifier";
+import { classifyFunction, classifyFunctionWithLsp, type FunctionClassification } from "./classifier";
 import type { GodotApiIndex } from "./godot_api_index";
-import type {
-	LspCancellationToken,
-	LspOriginResolver,
-} from "./lsp_origin_resolver";
+import type { LspCancellationToken, LspOriginResolver } from "./lsp_origin_resolver";
 import type { ProjectSymbolIndex } from "./project_symbol_index";
 import { scanFunctions } from "./scanner";
 import type { FunctionToken } from "./types";
 
-export type FunctionSemanticTokenType =
-	| "godotSystemFunction"
-	| "godotProjectFunction";
+export type FunctionSemanticTokenType = "godotSystemFunction" | "godotProjectFunction";
 
 export interface HighlightDocument {
 	uri: string;
@@ -48,10 +39,7 @@ export class FunctionHighlightingService {
 		this.invalidate();
 	}
 
-	analyze(
-		document: HighlightDocument,
-		cancellation?: LspCancellationToken,
-	): Promise<readonly AnalyzedFunction[]> {
+	analyze(document: HighlightDocument, cancellation?: LspCancellationToken): Promise<readonly AnalyzedFunction[]> {
 		const key = `${document.uri}:${document.version}`;
 		const existing = this.cache.get(key);
 		if (existing) {
@@ -117,13 +105,9 @@ export class FunctionHighlightingService {
 				return {
 					token,
 					classification,
-					tokenType:
-						classification.origin === "system"
-							? "godotSystemFunction"
-							: "godotProjectFunction",
+					tokenType: classification.origin === "system" ? "godotSystemFunction" : "godotProjectFunction",
 				} as AnalyzedFunction;
 			}),
 		);
 	}
 }
-

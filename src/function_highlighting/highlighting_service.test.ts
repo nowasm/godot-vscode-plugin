@@ -13,7 +13,7 @@ suite("Function highlighting service", () => {
 		});
 		const project = new ProjectSymbolIndex();
 		const uri = "res://sample.gd";
-		const text = "extends Node\nfunc _ready():\n\tprint(\"ok\")\n\tcustom_call()\n";
+		const text = 'extends Node\nfunc _ready():\n\tprint("ok")\n\tcustom_call()\n';
 		project.update(uri, text);
 		const service = new FunctionHighlightingService(api, project);
 		const document = { uri, version: 1, text };
@@ -26,7 +26,10 @@ suite("Function highlighting service", () => {
 		strictEqual(first.find((entry) => entry.token.name === "print")?.tokenType, "godotSystemFunction");
 		strictEqual(first.find((entry) => entry.token.name === "custom_call")?.tokenType, "godotProjectFunction");
 		const customOffset = text.indexOf("custom_call") + 2;
-		strictEqual((await service.classificationAt(document, customOffset))?.classification.reason, "unresolved_defaults_to_project");
+		strictEqual(
+			(await service.classificationAt(document, customOffset))?.classification.reason,
+			"unresolved_defaults_to_project",
+		);
 	});
 
 	test("invalidates cached results when API or project data changes", async () => {
@@ -41,4 +44,3 @@ suite("Function highlighting service", () => {
 		strictEqual(before === after, false);
 	});
 });
-

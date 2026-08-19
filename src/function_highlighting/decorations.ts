@@ -1,10 +1,7 @@
 import * as vscode from "vscode";
 
 import { HIGHLIGHT_CONFIG_PREFIX } from "../utils/extension_identity";
-import {
-	normalizeDecorationSettings,
-	type FunctionDecorationSettings,
-} from "./decoration_settings";
+import { normalizeDecorationSettings, type FunctionDecorationSettings } from "./decoration_settings";
 import type { FunctionHighlightingService } from "./highlighting_service";
 
 function readSettings(): FunctionDecorationSettings {
@@ -135,12 +132,9 @@ export class FunctionOriginDecorations implements vscode.Disposable {
 				editor.document.positionAt(entry.token.start),
 				editor.document.positionAt(entry.token.end),
 			);
-			(entry.classification.origin === "system" ? systemRanges : projectRanges).push(
-				range,
-			);
+			(entry.classification.origin === "system" ? systemRanges : projectRanges).push(range);
 		}
 		editor.setDecorations(this.systemDecoration, systemRanges);
 		editor.setDecorations(this.projectDecoration, projectRanges);
 	}
 }
-

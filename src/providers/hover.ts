@@ -28,9 +28,7 @@ export class GDHoverProvider implements HoverProvider {
 			{ language: "gdscene", scheme: "file" },
 			{ language: "gdscript", scheme: "file" },
 		];
-		context.subscriptions.push(
-			vscode.languages.registerHoverProvider(selector, this),
-		);
+		context.subscriptions.push(vscode.languages.registerHoverProvider(selector, this));
 	}
 
 	async get_links(text: string): Promise<string> {
@@ -50,13 +48,15 @@ export class GDHoverProvider implements HoverProvider {
 		return links;
 	}
 
-	async provideHover(document: TextDocument, position: Position, token: CancellationToken): Promise<Hover | undefined> {
+	async provideHover(
+		document: TextDocument,
+		position: Position,
+		token: CancellationToken,
+	): Promise<Hover | undefined> {
 		if (
 			document.languageId === "gdscript" &&
 			this.functionService &&
-			vscode.workspace
-				.getConfiguration(HIGHLIGHT_CONFIG_PREFIX)
-				.get("enabled", true)
+			vscode.workspace.getConfiguration(HIGHLIGHT_CONFIG_PREFIX).get("enabled", true)
 		) {
 			const entry = await this.functionService.classificationAt(
 				{
@@ -80,10 +80,7 @@ export class GDHoverProvider implements HoverProvider {
 				);
 				return new Hover(
 					contents,
-					new vscode.Range(
-						document.positionAt(entry.token.start),
-						document.positionAt(entry.token.end),
-					),
+					new vscode.Range(document.positionAt(entry.token.start), document.positionAt(entry.token.end)),
 				);
 			}
 		}

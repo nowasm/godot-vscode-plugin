@@ -8,17 +8,10 @@ export interface FunctionDecorationSettings {
 	projectFontStyle: FunctionFontStyle;
 }
 
-const FONT_STYLES = new Set<FunctionFontStyle>([
-	"normal",
-	"bold",
-	"italic",
-	"bold italic",
-]);
+const FONT_STYLES = new Set<FunctionFontStyle>(["normal", "bold", "italic", "bold italic"]);
 
 function color(value: unknown, fallback: string): string {
-	return typeof value === "string" && /^#[0-9a-f]{6}(?:[0-9a-f]{2})?$/i.test(value)
-		? value
-		: fallback;
+	return typeof value === "string" && /^#[0-9a-f]{6}(?:[0-9a-f]{2})?$/i.test(value) ? value : fallback;
 }
 
 function fontStyle(value: unknown): FunctionFontStyle {
@@ -38,4 +31,3 @@ export function normalizeDecorationSettings(
 		projectFontStyle: fontStyle(value.projectFontStyle),
 	};
 }
-

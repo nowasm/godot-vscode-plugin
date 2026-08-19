@@ -10,3 +10,5 @@ export * from "./highlighting_service";
 export * from "./decoration_settings";
 export * from "./runtime";
 export * from "./decorations";
+export * from "./status";
+export * from "./status_bar";

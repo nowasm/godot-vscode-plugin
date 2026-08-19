@@ -1,5 +1,13 @@
 # Changelog
 
+### 0.1.0 — GodParty fork
+
+- Distinguish Godot/system and project/custom GDScript function declarations and calls.
+- Add exact-version Godot API indexing with a bundled Godot 4.6.2 fallback snapshot.
+- Add project symbol indexing, hover evidence, configurable decorations, semantic tokens,
+  toggle/rebuild commands, and degraded-state feedback.
+- Preserve the upstream Godot Tools language server, debugger, formatter, and scene tools.
+
 ### 2.7.1
 
 - No changes from 2.7.0.

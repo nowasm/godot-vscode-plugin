@@ -2,19 +2,16 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
 
-import {
-	get_configuration,
-	get_project_dir,
-	get_project_version,
-	verify_godot_version,
-} from "../utils";
+import { get_configuration, get_project_dir, get_project_version, verify_godot_version } from "../utils";
 import { createLogger } from "../utils";
+import { HIGHLIGHT_CONFIG_PREFIX } from "../utils/extension_identity";
 import { FunctionHighlightingService } from "./highlighting_service";
 import { GodotApiIndex } from "./godot_api_index";
 import { loadGodotApi } from "./godot_api_loader";
 import { LspOriginResolver, type LspRequestClient } from "./lsp_origin_resolver";
-import { ProjectIndexService } from "./project_index_service";
+import { DEFAULT_PROJECT_EXCLUDES, ProjectIndexService } from "./project_index_service";
 import { ProjectSymbolIndex } from "./project_symbol_index";
+import type { FunctionIndexStatus } from "./status";
 import { VsCodeProjectWorkspaceAdapter } from "./vscode_project_workspace";
 
 const log = createLogger("function_highlighting.runtime");
@@ -25,6 +22,9 @@ export class FunctionHighlightingRuntime implements vscode.Disposable {
 
 	private readonly changeEmitter = new vscode.EventEmitter<void>();
 	readonly onDidChange = this.changeEmitter.event;
+	private readonly statusEmitter = new vscode.EventEmitter<FunctionIndexStatus>();
+	readonly onDidStatusChange = this.statusEmitter.event;
+	status: FunctionIndexStatus = { kind: "indexing" };
 	private readonly projectService: ProjectIndexService;
 
 	constructor(
@@ -37,9 +37,7 @@ export class FunctionHighlightingRuntime implements vscode.Disposable {
 			"godot_api",
 			"godot-4.6.json",
 		).fsPath;
-		const fallbackApi = GodotApiIndex.fromJson(
-			fs.readFileSync(bundledSnapshotPath, "utf8"),
-		);
+		const fallbackApi = GodotApiIndex.fromJson(fs.readFileSync(bundledSnapshotPath, "utf8"));
 		const resolver = new LspOriginResolver(lspClient, {
 			isWorkspaceUri: (uri) => {
 				try {
@@ -49,15 +47,9 @@ export class FunctionHighlightingRuntime implements vscode.Disposable {
 				}
 			},
 			getDocumentVersion: (uri) =>
-				vscode.workspace.textDocuments.find(
-					(document) => document.uri.toString() === uri,
-				)?.version,
+				vscode.workspace.textDocuments.find((document) => document.uri.toString() === uri)?.version,
 		});
-		this.service = new FunctionHighlightingService(
-			fallbackApi,
-			this.project,
-			resolver,
-		);
+		this.service = new FunctionHighlightingService(fallbackApi, this.project, resolver);
 		this.projectService = new ProjectIndexService(
 			this.project,
 			new VsCodeProjectWorkspaceAdapter(),
@@ -70,7 +62,12 @@ export class FunctionHighlightingRuntime implements vscode.Disposable {
 	}
 
 	async initialize(): Promise<void> {
+		this.setStatus({ kind: "indexing" });
 		try {
+			const configuredExcludes = vscode.workspace
+				.getConfiguration(HIGHLIGHT_CONFIG_PREFIX)
+				.get<string[]>("exclude", []);
+			this.projectService.setExcludes([...new Set([...DEFAULT_PROJECT_EXCLUDES, ...configuredExcludes])]);
 			await this.projectService.initialize();
 			await this.loadAutoloads();
 			this.service.invalidate();
@@ -96,30 +93,40 @@ export class FunctionHighlightingRuntime implements vscode.Disposable {
 			const result = await loadGodotApi({
 				cacheDir: path.join(this.context.globalStorageUri.fsPath, "godot-api"),
 				bundledSnapshotPath,
-				godotPath:
-					verification?.status === "SUCCESS" ? verification.godotPath : undefined,
-				godotVersion:
-					verification?.status === "SUCCESS" ? verification.version : projectVersion,
+				godotPath: verification?.status === "SUCCESS" ? verification.godotPath : undefined,
+				godotVersion: verification?.status === "SUCCESS" ? verification.version : projectVersion,
 			});
 			this.service.setApi(result.index);
 			this.changeEmitter.fire();
+			this.setStatus(
+				result.source === "fallback"
+					? { kind: "fallback", version: result.index.version }
+					: { kind: "ready", version: result.index.version },
+			);
 			log.info(`Function API index ready: ${result.index.version} (${result.source})`);
 			if (result.warning) {
 				log.warn(result.warning);
 			}
 		} catch (error) {
 			log.warn(`Using bundled function API index: ${String(error)}`);
+			this.setStatus({ kind: "error", message: String(error) });
 		}
 	}
 
 	dispose(): void {
 		this.projectService.dispose();
 		this.changeEmitter.dispose();
+		this.statusEmitter.dispose();
 	}
 
 	refresh(): void {
 		this.service.invalidate();
 		this.changeEmitter.fire();
+	}
+
+	private setStatus(status: FunctionIndexStatus): void {
+		this.status = status;
+		this.statusEmitter.fire(status);
 	}
 
 	private async loadAutoloads(): Promise<void> {

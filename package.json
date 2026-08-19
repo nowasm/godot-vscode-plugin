@@ -247,6 +247,16 @@
 				"category": "Godot Tools",
 				"command": "godotTools.copyResourcePath",
 				"title": "Copy Resource Path"
+			},
+			{
+				"category": "GodParty Godot Tools",
+				"command": "godpartyGodotTools.functionHighlight.toggle",
+				"title": "Toggle Function Origin Highlighting"
+			},
+			{
+				"category": "GodParty Godot Tools",
+				"command": "godpartyGodotTools.functionHighlight.rebuildIndex",
+				"title": "Rebuild Function Origin Index"
 			}
 		],
 		"keybindings": [
@@ -260,6 +270,39 @@
 			"type": "object",
 			"title": "Godot Tools",
 			"properties": {
+				"godpartyGodotTools.functionHighlight.enabled": {
+					"type": "boolean",
+					"default": true,
+					"description": "Distinguish Godot/system functions from project-defined functions in GDScript."
+				},
+				"godpartyGodotTools.functionHighlight.systemColor": {
+					"type": "string",
+					"default": "#4FC3F7",
+					"description": "Editor color for Godot/system function names."
+				},
+				"godpartyGodotTools.functionHighlight.projectColor": {
+					"type": "string",
+					"default": "#FFD166",
+					"description": "Editor color for project-defined function names."
+				},
+				"godpartyGodotTools.functionHighlight.systemFontStyle": {
+					"type": "string",
+					"enum": ["normal", "bold", "italic", "bold italic"],
+					"default": "normal",
+					"description": "Font style for Godot/system function names."
+				},
+				"godpartyGodotTools.functionHighlight.projectFontStyle": {
+					"type": "string",
+					"enum": ["normal", "bold", "italic", "bold italic"],
+					"default": "normal",
+					"description": "Font style for project-defined function names."
+				},
+				"godpartyGodotTools.functionHighlight.exclude": {
+					"type": "array",
+					"items": { "type": "string" },
+					"default": ["**/.godot/**", "**/.git/**", "**/build/**", "**/dist/**"],
+					"description": "Glob patterns excluded from the project function index."
+				},
 				"godotTools.documentation.pageScale": {
 					"type": "integer",
 					"default": 100,
@@ -451,6 +494,12 @@
 				"scopes": {
 					"nodePath": [
 						"constant.character.escape"
+					],
+					"godotSystemFunction": [
+						"support.function.godot-system"
+					],
+					"godotProjectFunction": [
+						"entity.name.function.godot-project"
 					]
 				}
 			}

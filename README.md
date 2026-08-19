@@ -1,4 +1,42 @@
-# Godot Tools
+# GodParty Godot Tools
+
+GodParty Godot Tools is a project-specific fork of the official [Godot Tools for
+VS Code](https://github.com/godotengine/godot-vscode-plugin). It retains the
+upstream GDScript language server, debugger, formatter, and scene tooling, and
+adds function-origin highlighting for Godot 4 GDScript.
+
+Every detected function declaration and call is assigned one of two visible
+origins:
+
+- Godot/system functions use cyan (`#4FC3F7`) by default.
+- Project/custom functions use gold (`#FFD166`) by default.
+
+The classifier combines the exact Godot API, project scripts, explicit GDScript
+types, Autoloads, inheritance, and LSP evidence. Hover a highlighted function to
+see its owner and the classification reason. If a dynamic call cannot be proven
+to be part of Godot, it is deliberately classified as project code.
+
+## Install this fork
+
+1. Disable the official `geequlim.godot-tools` extension. Both extensions own
+   the same GDScript language integration and must not run together.
+2. In VS Code, run **Extensions: Install from VSIX...** and select
+   `godparty-godot-tools-0.1.0.vsix`.
+3. Open a folder containing `project.godot`. For an exact engine API index,
+   configure the existing `godotTools.editorPath.godot4` setting.
+
+The command palette contains **GodParty Godot Tools: Toggle Function Origin
+Highlighting** and **GodParty Godot Tools: Rebuild Function Origin Index**.
+Settings are available under `godpartyGodotTools.functionHighlight.*`:
+
+- `enabled`
+- `systemColor` and `projectColor`
+- `systemFontStyle` and `projectFontStyle`
+- `exclude` project-index glob patterns
+
+See [UPSTREAM.md](UPSTREAM.md) for the fork baseline and attribution.
+
+## Upstream Godot Tools documentation
 
 Game development tools for working with [Godot Engine](http://www.godotengine.org/) in Visual Studio Code.
 
@@ -57,7 +95,10 @@ Godot 3.2 or later.
 - GDShader (`.gdshader`) language features:
   - syntax highlighting
 
-# Download
+# Upstream downloads
+
+The links below install the official extension, not this fork. Use the VSIX
+instructions above for GodParty Godot Tools.
 
 - [Visual Studio Marketplace **(recommended)**](https://marketplace.visualstudio.com/items?itemName=geequlim.godot-tools)
   - Stable release, with support for automatic updates.

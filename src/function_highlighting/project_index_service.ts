@@ -25,9 +25,13 @@ export class ProjectIndexService implements DisposableLike {
 	constructor(
 		readonly index: ProjectSymbolIndex,
 		private readonly workspace: ProjectWorkspaceAdapter,
-		private readonly excludes: readonly string[] = DEFAULT_PROJECT_EXCLUDES,
+		private excludes: readonly string[] = DEFAULT_PROJECT_EXCLUDES,
 		private readonly onDidChange?: (uri: string) => void,
 	) {}
+
+	setExcludes(excludes: readonly string[]): void {
+		this.excludes = excludes;
+	}
 
 	async initialize(): Promise<void> {
 		const uris = await this.workspace.findGDScriptFiles(this.excludes);

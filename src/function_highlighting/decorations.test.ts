@@ -28,4 +28,3 @@ suite("Function highlighting decorations", () => {
 		);
 	});
 });
-
