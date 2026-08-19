@@ -1,0 +1,12 @@
+[application]
+
+config/name="Function Origin Highlighting Fixture"
+config/features=PackedStringArray("4.6")
+
+[autoload]
+
+TestManager="*res://test_manager.gd"
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"

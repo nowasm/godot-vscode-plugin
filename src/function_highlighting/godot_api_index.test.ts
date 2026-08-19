@@ -30,6 +30,9 @@ suite("GodotApiIndex", () => {
 		strictEqual(index.version, "4.6.2-stable");
 		strictEqual(index.cacheKey, "4.6.2-stable");
 		strictEqual(index.hasUtilityFunction("print"), true);
+		strictEqual(index.hasUtilityFunction("range"), true);
+		strictEqual(index.hasUtilityFunction("load"), true);
+		strictEqual(index.hasUtilityFunction("preload"), true);
 		strictEqual(index.hasBuiltinMethod("Array", "append"), true);
 		strictEqual(index.hasNativeMethod("Node", "add_child"), true);
 		strictEqual(index.hasNativeMethod("Node", "connect"), true);
@@ -52,11 +55,15 @@ suite("GodotApiIndex", () => {
 	});
 
 	test("loads the bundled Godot 4.6 snapshot", () => {
-		const snapshot = fs.readFileSync(path.join(process.cwd(), "resources", "godot_api", "godot-4.6.json"), "utf8");
+		const snapshot = fs.readFileSync(
+			path.resolve(__dirname, "..", "..", "resources", "godot_api", "godot-4.6.json"),
+			"utf8",
+		);
 		const index = GodotApiIndex.fromJson(snapshot);
 
 		strictEqual(index.version, "4.6.2-stable");
 		strictEqual(index.hasUtilityFunction("print"), true);
+		strictEqual(index.hasUtilityFunction("range"), true);
 		strictEqual(index.hasBuiltinMethod("Array", "append"), true);
 		strictEqual(index.hasNativeMethod("Node", "add_child"), true);
 		strictEqual(index.hasVirtualMethod("Node", "_ready"), true);

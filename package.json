@@ -43,6 +43,9 @@
 		"generate-icons": "ts-node tools/generate_icons.ts",
 		"generate-api-snapshot": "ts-node tools/generate_godot_api_snapshot.ts",
 		"test": "vscode-test",
+		"test:function-highlighting:vscode": "ts-node tools/run_local_vscode_tests.ts",
+		"test:function-highlighting:godparty": "ts-node tools/run_local_vscode_tests.ts --godparty",
+		"test:local": "ts-node tools/run_local_vscode_tests.ts --all",
 		"test:headless": "WAYLAND_DISPLAY= xvfb-run --auto-servernum --server-args='-screen 0 1024x768x24 -ac +extension GLX' npm test",
 		"test:engine": "ts-node tools/run_tests.ts"
 	},

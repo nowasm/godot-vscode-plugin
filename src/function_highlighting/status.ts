@@ -10,9 +10,7 @@ export interface FunctionIndexStatusDescription {
 	tooltip: string;
 }
 
-export function describeFunctionIndexStatus(
-	status: FunctionIndexStatus,
-): FunctionIndexStatusDescription {
+export function describeFunctionIndexStatus(status: FunctionIndexStatus): FunctionIndexStatusDescription {
 	switch (status.kind) {
 		case "indexing":
 			return {

@@ -4,6 +4,7 @@ export * from "./godot_api_index";
 export * from "./godot_api_loader";
 export * from "./project_symbol_index";
 export * from "./project_index_service";
+export * from "./project_file";
 export * from "./classifier";
 export * from "./lsp_origin_resolver";
 export * from "./highlighting_service";

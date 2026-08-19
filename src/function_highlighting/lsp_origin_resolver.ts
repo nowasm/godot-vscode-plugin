@@ -22,6 +22,7 @@ export interface LspOriginResolution {
 export interface LspOriginResolverOptions {
 	isWorkspaceUri(uri: string): boolean;
 	getDocumentVersion(uri: string): number | undefined;
+	requestTimeoutMs?: number;
 }
 
 function definitionUris(value: unknown): string[] {
@@ -100,7 +101,7 @@ export class LspOriginResolver {
 			position: { line: request.line, character: request.character },
 		};
 		try {
-			const definition = await this.client.sendRequest("textDocument/definition", params);
+			const definition = await this.sendRequest("textDocument/definition", params);
 			if (!this.isCurrent(request, cancellation)) {
 				return undefined;
 			}
@@ -114,7 +115,7 @@ export class LspOriginResolver {
 				}
 			}
 
-			const hover = await this.client.sendRequest("textDocument/hover", params);
+			const hover = await this.sendRequest("textDocument/hover", params);
 			if (!this.isCurrent(request, cancellation)) {
 				return undefined;
 			}
@@ -123,6 +124,34 @@ export class LspOriginResolver {
 		} catch {
 			return undefined;
 		}
+	}
+
+	private sendRequest(method: string, params: unknown): Promise<unknown> {
+		const request = this.client.sendRequest(method, params);
+		const timeoutMs = this.options.requestTimeoutMs ?? 750;
+		return new Promise((resolve, reject) => {
+			let settled = false;
+			const timer = setTimeout(() => {
+				settled = true;
+				reject(new Error(`LSP request timed out after ${timeoutMs}ms`));
+			}, timeoutMs);
+			request.then(
+				(value) => {
+					if (!settled) {
+						settled = true;
+						clearTimeout(timer);
+						resolve(value);
+					}
+				},
+				(error) => {
+					if (!settled) {
+						settled = true;
+						clearTimeout(timer);
+						reject(error);
+					}
+				},
+			);
+		});
 	}
 
 	private isCurrent(request: LspOriginRequest, cancellation?: LspCancellationToken): boolean {

@@ -12,7 +12,7 @@ interface ExtensionManifest {
 
 suite("Function highlighting manifest", () => {
 	const manifest = JSON.parse(
-		readFileSync(path.join(process.cwd(), "package.json"), "utf8"),
+		readFileSync(path.resolve(__dirname, "..", "..", "package.json"), "utf8"),
 	) as ExtensionManifest;
 
 	test("registers function highlighting commands", () => {
@@ -24,33 +24,15 @@ suite("Function highlighting manifest", () => {
 	test("contributes all public settings with intended defaults", () => {
 		const properties = manifest.contributes.configuration.properties;
 		strictEqual(properties["godpartyGodotTools.functionHighlight.enabled"]?.default, true);
-		strictEqual(
-			properties["godpartyGodotTools.functionHighlight.systemColor"]?.default,
-			"#4FC3F7",
-		);
-		strictEqual(
-			properties["godpartyGodotTools.functionHighlight.projectColor"]?.default,
-			"#FFD166",
-		);
-		strictEqual(
-			properties["godpartyGodotTools.functionHighlight.systemFontStyle"]?.default,
-			"normal",
-		);
-		strictEqual(
-			properties["godpartyGodotTools.functionHighlight.projectFontStyle"]?.default,
-			"normal",
-		);
-		strictEqual(
-			Array.isArray(properties["godpartyGodotTools.functionHighlight.exclude"]?.default),
-			true,
-		);
+		strictEqual(properties["godpartyGodotTools.functionHighlight.systemColor"]?.default, "#4FC3F7");
+		strictEqual(properties["godpartyGodotTools.functionHighlight.projectColor"]?.default, "#FFD166");
+		strictEqual(properties["godpartyGodotTools.functionHighlight.systemFontStyle"]?.default, "normal");
+		strictEqual(properties["godpartyGodotTools.functionHighlight.projectFontStyle"]?.default, "normal");
+		strictEqual(Array.isArray(properties["godpartyGodotTools.functionHighlight.exclude"]?.default), true);
 	});
 
 	test("maps both semantic token types to TextMate scopes", () => {
-		const scopes = Object.assign(
-			{},
-			...manifest.contributes.semanticTokenScopes.map((entry) => entry.scopes),
-		);
+		const scopes = Object.assign({}, ...manifest.contributes.semanticTokenScopes.map((entry) => entry.scopes));
 		strictEqual(scopes.godotSystemFunction?.[0], "support.function.godot-system");
 		strictEqual(scopes.godotProjectFunction?.[0], "entity.name.function.godot-project");
 	});

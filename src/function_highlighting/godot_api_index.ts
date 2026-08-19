@@ -31,6 +31,27 @@ function methodNames(methods: GodotApiMethod[] | undefined): Set<string> {
 	);
 }
 
+// Godot exposes these on @GDScript rather than in extension_api.json. This list
+// comes from Godot 4.6.2's generated @GDScript.xml (`godot --doctool`).
+const GDSCRIPT_LANGUAGE_FUNCTIONS = [
+	"Color8",
+	"assert",
+	"char",
+	"convert",
+	"dict_to_inst",
+	"get_stack",
+	"inst_to_dict",
+	"is_instance_of",
+	"len",
+	"load",
+	"ord",
+	"preload",
+	"print_debug",
+	"print_stack",
+	"range",
+	"type_exists",
+] as const;
+
 export class GodotApiIndex {
 	readonly version: string;
 	readonly cacheKey: string;
@@ -49,6 +70,11 @@ export class GodotApiIndex {
 		this.version = header.version_status ? `${numericVersion}-${header.version_status}` : numericVersion;
 		this.cacheKey = this.version.replace(/[^A-Za-z0-9._-]/g, "-");
 		this.utilityFunctions = methodNames(api.utility_functions);
+		if ((header.version_major ?? 4) === 4) {
+			for (const functionName of GDSCRIPT_LANGUAGE_FUNCTIONS) {
+				this.utilityFunctions.add(functionName);
+			}
+		}
 
 		for (const builtin of api.builtin_classes ?? []) {
 			if (builtin.name) {

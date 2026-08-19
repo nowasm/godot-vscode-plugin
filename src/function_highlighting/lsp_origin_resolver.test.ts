@@ -17,6 +17,12 @@ class FakeClient implements LspRequestClient {
 	}
 }
 
+class HangingClient implements LspRequestClient {
+	sendRequest(): Promise<unknown> {
+		return new Promise(() => {});
+	}
+}
+
 suite("LspOriginResolver", () => {
 	test("recognizes project definitions and caches by document version", async () => {
 		const client = new FakeClient();
@@ -68,6 +74,19 @@ suite("LspOriginResolver", () => {
 		client.error = new Error("LSP unavailable");
 		strictEqual(
 			await resolver.resolve({ uri: "file:///a.gd", version: 4, offset: 2, line: 0, character: 2 }),
+			undefined,
+		);
+	});
+
+	test("times out when the language server is disconnected", async () => {
+		const resolver = new LspOriginResolver(new HangingClient(), {
+			isWorkspaceUri: () => false,
+			getDocumentVersion: () => 1,
+			requestTimeoutMs: 10,
+		});
+
+		strictEqual(
+			await resolver.resolve({ uri: "file:///a.gd", version: 1, offset: 1, line: 0, character: 1 }),
 			undefined,
 		);
 	});

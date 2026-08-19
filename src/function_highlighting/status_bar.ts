@@ -3,10 +3,7 @@ import * as vscode from "vscode";
 import { describeFunctionIndexStatus, type FunctionIndexStatus } from "./status";
 
 export class FunctionIndexStatusBar implements vscode.Disposable {
-	private readonly item = vscode.window.createStatusBarItem(
-		vscode.StatusBarAlignment.Right,
-		90,
-	);
+	private readonly item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 90);
 
 	constructor(onDidChange: vscode.Event<FunctionIndexStatus>, initial: FunctionIndexStatus) {
 		this.item.name = "GodParty function origin index";

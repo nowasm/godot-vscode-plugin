@@ -10,6 +10,7 @@ import { GodotApiIndex } from "./godot_api_index";
 import { loadGodotApi } from "./godot_api_loader";
 import { LspOriginResolver, type LspRequestClient } from "./lsp_origin_resolver";
 import { DEFAULT_PROJECT_EXCLUDES, ProjectIndexService } from "./project_index_service";
+import { parseProjectAutoloads } from "./project_file";
 import { ProjectSymbolIndex } from "./project_symbol_index";
 import type { FunctionIndexStatus } from "./status";
 import { VsCodeProjectWorkspaceAdapter } from "./vscode_project_workspace";
@@ -136,10 +137,9 @@ export class FunctionHighlightingRuntime implements vscode.Disposable {
 		}
 		const projectFile = path.join(projectDir, "project.godot");
 		const source = await fs.promises.readFile(projectFile, "utf8");
-		const pattern = /^([A-Za-z_]\w*)\s*=\s*["']\*?(res:\/\/[^"']+\.gd)["']/gm;
-		for (const match of source.matchAll(pattern)) {
-			const filePath = path.join(projectDir, match[2].slice("res://".length));
-			this.project.setAutoload(match[1], vscode.Uri.file(filePath).toString());
+		for (const autoload of parseProjectAutoloads(source)) {
+			const filePath = path.join(projectDir, autoload.resourcePath.slice("res://".length));
+			this.project.setAutoload(autoload.name, vscode.Uri.file(filePath).toString());
 		}
 	}
 }
