@@ -94,6 +94,10 @@ export class GodotApiIndex {
 		return this.builtinMethods.get(typeName)?.has(methodName) ?? false;
 	}
 
+	hasBuiltinClass(typeName: string): boolean {
+		return this.builtinMethods.has(typeName);
+	}
+
 	hasNativeClass(typeName: string): boolean {
 		return this.nativeMethods.has(typeName);
 	}
@@ -131,4 +135,3 @@ export class GodotApiIndex {
 		return undefined;
 	}
 }
-
