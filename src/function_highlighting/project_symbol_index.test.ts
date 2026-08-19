@@ -32,33 +32,18 @@ func move_player(target: Vector2, enemy: Enemy) -> void:
 `,
 		);
 
-		strictEqual(
-			index.resolveClassMethod("Player", "move_player")?.uri,
-			"res://player.gd",
-		);
-		strictEqual(
-			index.resolveClassMethod("Player", "shared_action")?.uri,
-			"res://base_actor.gd",
-		);
+		strictEqual(index.resolveClassMethod("Player", "move_player")?.uri, "res://player.gd");
+		strictEqual(index.resolveClassMethod("Player", "shared_action")?.uri, "res://base_actor.gd");
 		strictEqual(index.resolveClassMethod("Player", "create_player")?.isStatic, true);
 		strictEqual(index.resolveVariableType("res://player.gd", "target_node"), "Node");
-		strictEqual(
-			index.resolveVariableType("res://player.gd", "enemy", "move_player"),
-			"Enemy",
-		);
-		strictEqual(
-			index.resolveVariableType("res://player.gd", "timer", "move_player"),
-			"Timer",
-		);
+		strictEqual(index.resolveVariableType("res://player.gd", "enemy", "move_player"), "Enemy");
+		strictEqual(index.resolveVariableType("res://player.gd", "timer", "move_player"), "Timer");
 		strictEqual(index.resolveScriptAlias("res://player.gd", "EnemyScript"), "res://enemy.gd");
 	});
 
 	test("treats autoload and addon scripts as project-owned", () => {
 		const index = new ProjectSymbolIndex();
-		index.update(
-			"res://src/autoload/game_manager.gd",
-			"extends Node\nfunc change_phase() -> void: pass\n",
-		);
+		index.update("res://src/autoload/game_manager.gd", "extends Node\nfunc change_phase() -> void: pass\n");
 		index.update(
 			"res://addons/example/tool.gd",
 			"class_name AddonTool\nextends RefCounted\nfunc execute() -> void: pass\n",
@@ -84,4 +69,3 @@ func move_player(target: Vector2, enemy: Enemy) -> void:
 		strictEqual(index.resolveClassMethod("Changing", "after"), undefined);
 	});
 });
-

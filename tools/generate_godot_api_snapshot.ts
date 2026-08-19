@@ -41,9 +41,7 @@ if (!godotPath) {
 	throw new Error("Usage: npm run generate-api-snapshot -- --godot <executable> [--output <file>]");
 }
 
-const outputPath = path.resolve(
-	argument("--output") ?? path.join("resources", "godot_api", "godot-4.6.json"),
-);
+const outputPath = path.resolve(argument("--output") ?? path.join("resources", "godot_api", "godot-4.6.json"));
 const temporaryPrefix = "godparty-godot-api-";
 const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), temporaryPrefix));
 
@@ -74,4 +72,3 @@ try {
 		fs.rmSync(resolvedTemporaryDirectory, { recursive: true, force: true });
 	}
 }
-

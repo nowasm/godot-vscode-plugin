@@ -11,13 +11,18 @@ import {
 } from "vscode";
 import { SceneParser } from "../scene_tools";
 import { convert_resource_path_to_uri, createLogger, convert_uid_to_uri, convert_uri_to_resource_path } from "../utils";
+import type { FunctionHighlightingService } from "../function_highlighting";
+import { HIGHLIGHT_CONFIG_PREFIX } from "../utils/extension_identity";
 
 const log = createLogger("providers.hover");
 
 export class GDHoverProvider implements HoverProvider {
 	public parser = new SceneParser();
 
-	constructor(private context: ExtensionContext) {
+	constructor(
+		private context: ExtensionContext,
+		private readonly functionService?: FunctionHighlightingService,
+	) {
 		const selector = [
 			{ language: "gdresource", scheme: "file" },
 			{ language: "gdscene", scheme: "file" },
@@ -46,6 +51,43 @@ export class GDHoverProvider implements HoverProvider {
 	}
 
 	async provideHover(document: TextDocument, position: Position, token: CancellationToken): Promise<Hover | undefined> {
+		if (
+			document.languageId === "gdscript" &&
+			this.functionService &&
+			vscode.workspace
+				.getConfiguration(HIGHLIGHT_CONFIG_PREFIX)
+				.get("enabled", true)
+		) {
+			const entry = await this.functionService.classificationAt(
+				{
+					uri: document.uri.toString(),
+					version: document.version,
+					text: document.getText(),
+				},
+				document.offsetAt(position),
+				token,
+			);
+			if (entry) {
+				const contents = new MarkdownString();
+				contents.appendMarkdown(
+					`**GodParty function origin:** ${entry.classification.origin === "system" ? "Godot system" : "Project custom"}\n\n`,
+				);
+				if (entry.classification.owner) {
+					contents.appendMarkdown(`**Owner:** \`${entry.classification.owner}\`\n\n`);
+				}
+				contents.appendMarkdown(
+					`**Reason:** \`${entry.classification.reason}\` (${entry.classification.confidence})`,
+				);
+				return new Hover(
+					contents,
+					new vscode.Range(
+						document.positionAt(entry.token.start),
+						document.positionAt(entry.token.end),
+					),
+				);
+			}
+		}
+
 		if (["gdresource", "gdscene"].includes(document.languageId)) {
 			const scene = this.parser.parse_scene(document);
 

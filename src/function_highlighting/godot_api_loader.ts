@@ -86,9 +86,7 @@ function errorMessage(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
 }
 
-export async function loadGodotApi(
-	options: GodotApiLoadOptions,
-): Promise<GodotApiLoadResult> {
+export async function loadGodotApi(options: GodotApiLoadOptions): Promise<GodotApiLoadResult> {
 	const fileSystem = options.fileSystem ?? nodeApiFileSystem;
 	const runner = options.runner ?? nodeApiProcessRunner;
 	const warnings: string[] = [];
@@ -112,11 +110,7 @@ export async function loadGodotApi(
 		const generatedPath = path.join(options.cacheDir, "extension_api.json");
 		const temporaryPath = `${cachePath}.${process.pid}.${Date.now()}.tmp`;
 		try {
-			await runner.run(
-				options.godotPath,
-				["--headless", "--dump-extension-api"],
-				options.cacheDir,
-			);
+			await runner.run(options.godotPath, ["--headless", "--dump-extension-api"], options.cacheDir);
 			const generated = await fileSystem.readFile(generatedPath);
 			const index = GodotApiIndex.fromJson(generated);
 			await fileSystem.writeFile(temporaryPath, generated);
@@ -137,4 +131,3 @@ export async function loadGodotApi(
 		warning: warnings.length > 0 ? warnings.join("; ") : undefined,
 	};
 }
-

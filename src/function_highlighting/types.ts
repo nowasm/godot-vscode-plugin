@@ -9,4 +9,3 @@ export interface FunctionToken {
 	readonly isStatic: boolean;
 	readonly enclosingFunction?: string;
 }
-

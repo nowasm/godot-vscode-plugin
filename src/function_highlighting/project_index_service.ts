@@ -1,11 +1,6 @@
 import type { ProjectSymbolIndex } from "./project_symbol_index";
 
-export const DEFAULT_PROJECT_EXCLUDES = [
-	"**/.godot/**",
-	"**/.git/**",
-	"**/build/**",
-	"**/dist/**",
-] as const;
+export const DEFAULT_PROJECT_EXCLUDES = ["**/.godot/**", "**/.git/**", "**/build/**", "**/dist/**"] as const;
 
 export interface WorkspaceScriptDocument {
 	uri: string;
@@ -20,10 +15,7 @@ export interface DisposableLike {
 export interface ProjectWorkspaceAdapter {
 	findGDScriptFiles(excludes: readonly string[]): Promise<string[]>;
 	readDocument(uri: string): Promise<WorkspaceScriptDocument>;
-	watch(
-		onChange: (document: WorkspaceScriptDocument) => void,
-		onDelete: (uri: string) => void,
-	): DisposableLike;
+	watch(onChange: (document: WorkspaceScriptDocument) => void, onDelete: (uri: string) => void): DisposableLike;
 }
 
 export class ProjectIndexService implements DisposableLike {
@@ -34,6 +26,7 @@ export class ProjectIndexService implements DisposableLike {
 		readonly index: ProjectSymbolIndex,
 		private readonly workspace: ProjectWorkspaceAdapter,
 		private readonly excludes: readonly string[] = DEFAULT_PROJECT_EXCLUDES,
+		private readonly onDidChange?: (uri: string) => void,
 	) {}
 
 	async initialize(): Promise<void> {
@@ -55,12 +48,14 @@ export class ProjectIndexService implements DisposableLike {
 		}
 		this.index.update(document.uri, document.text);
 		this.versions.set(document.uri, document.version);
+		this.onDidChange?.(document.uri);
 		return true;
 	}
 
 	removeDocument(uri: string): void {
 		this.versions.delete(uri);
 		this.index.remove(uri);
+		this.onDidChange?.(uri);
 	}
 
 	dispose(): void {
@@ -68,4 +63,3 @@ export class ProjectIndexService implements DisposableLike {
 		this.watcher = undefined;
 	}
 }
-

@@ -19,6 +19,10 @@ import { GodotDebugger } from "./debugger";
 import { DebugServer } from "./dev/debug_server";
 import { FormattingProvider } from "./formatter";
 import {
+	FunctionHighlightingRuntime,
+	FunctionOriginDecorations,
+} from "./function_highlighting";
+import {
 	get_configuration,
 	find_file,
 	find_project_file,
@@ -47,6 +51,8 @@ interface Extension {
 	docsProvider?: GDDocumentationProvider;
 	definitionProvider?: GDDefinitionProvider;
 	semanticTokensProvider?: GDSemanticTokensProvider;
+	functionHighlightingRuntime?: FunctionHighlightingRuntime;
+	functionOriginDecorations?: FunctionOriginDecorations;
 	completionProvider?: GDCompletionItemProvider;
 	tasksProvider?: GDTaskProvider;
 	devServer?: DebugServer;
@@ -58,17 +64,38 @@ export function activate(context: vscode.ExtensionContext) {
 	attemptSettingsUpdate(context);
 
 	globals.context = context;
-	globals.lsp = new ClientConnectionManager(context);
+	const lsp = new ClientConnectionManager(context);
+	globals.lsp = lsp;
+	globals.functionHighlightingRuntime = new FunctionHighlightingRuntime(context, {
+		sendRequest: (method, params) => lsp.client.sendRequest(method, params),
+	});
 	globals.debug = new GodotDebugger(context);
 	globals.scenePreviewProvider = new ScenePreviewProvider(context);
 	globals.linkProvider = new GDDocumentLinkProvider(context);
 	globals.dropsProvider = new GDDocumentDropEditProvider(context);
-	globals.hoverProvider = new GDHoverProvider(context);
+	globals.hoverProvider = new GDHoverProvider(
+		context,
+		globals.functionHighlightingRuntime.service,
+	);
 	globals.inlayProvider = new GDInlayHintsProvider(context);
 	globals.formattingProvider = new FormattingProvider(context);
 	globals.docsProvider = new GDDocumentationProvider(context);
 	globals.definitionProvider = new GDDefinitionProvider(context);
-	// globals.semanticTokensProvider = new GDSemanticTokensProvider(context);
+	globals.semanticTokensProvider = new GDSemanticTokensProvider(
+		context,
+		globals.functionHighlightingRuntime.service,
+		globals.functionHighlightingRuntime.onDidChange,
+	);
+	globals.functionOriginDecorations = new FunctionOriginDecorations(
+		globals.functionHighlightingRuntime.service,
+		globals.functionHighlightingRuntime.onDidChange,
+	);
+	context.subscriptions.push(
+		globals.functionHighlightingRuntime,
+		globals.functionOriginDecorations,
+		lsp.onStatusChanged(() => globals.functionHighlightingRuntime?.refresh()),
+	);
+	void globals.functionHighlightingRuntime.initialize();
 	// globals.completionProvider = new GDCompletionItemProvider(context);
 	// globals.tasksProvider = new GDTaskProvider(context);
 

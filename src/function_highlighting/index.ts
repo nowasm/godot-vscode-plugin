@@ -6,3 +6,7 @@ export * from "./project_symbol_index";
 export * from "./project_index_service";
 export * from "./classifier";
 export * from "./lsp_origin_resolver";
+export * from "./highlighting_service";
+export * from "./decoration_settings";
+export * from "./runtime";
+export * from "./decorations";

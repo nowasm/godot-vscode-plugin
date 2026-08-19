@@ -46,7 +46,7 @@ export function maskNonCode(source: string): string {
 		}
 
 		const quote = source[index];
-		if (quote !== "\"" && quote !== "'") {
+		if (quote !== '"' && quote !== "'") {
 			index++;
 			continue;
 		}
@@ -139,13 +139,11 @@ export function scanFunctions(source: string): FunctionToken[] {
 	const masked = maskNonCode(source);
 	const declarations = findDeclarations(masked);
 	const declarationStarts = new Set(declarations.map((declaration) => declaration.start));
-	const rawTokens: Array<Omit<FunctionToken, "enclosingFunction">> = declarations.map(
-		(declaration) => ({
-			...declaration,
-			kind: "declaration",
-			receiver: undefined,
-		}),
-	);
+	const rawTokens: Array<Omit<FunctionToken, "enclosingFunction">> = declarations.map((declaration) => ({
+		...declaration,
+		kind: "declaration",
+		receiver: undefined,
+	}));
 
 	const callPattern = /\b([A-Za-z_]\w*)\s*\(/g;
 	for (const match of masked.matchAll(callPattern)) {
@@ -154,11 +152,7 @@ export function scanFunctions(source: string): FunctionToken[] {
 		}
 		const name = match[1];
 		const start = match.index;
-		if (
-			declarationStarts.has(start) ||
-			NON_CALL_KEYWORDS.has(name) ||
-			isAnnotation(masked, start)
-		) {
+		if (declarationStarts.has(start) || NON_CALL_KEYWORDS.has(name) || isAnnotation(masked, start)) {
 			continue;
 		}
 
@@ -183,4 +177,3 @@ export function scanFunctions(source: string): FunctionToken[] {
 		return { ...token, enclosingFunction };
 	});
 }
-

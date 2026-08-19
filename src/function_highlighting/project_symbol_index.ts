@@ -49,9 +49,7 @@ function parseScript(uri: string, source: string): ProjectScriptSymbol {
 	const masked = maskNonCode(source);
 	const className = firstMatch(masked, /^\s*class_name\s+([A-Za-z_]\w*)/m);
 	const extendsName = firstMatch(masked, /^\s*extends\s+([A-Za-z_]\w*)/m);
-	const functionTokens = scanFunctions(source).filter(
-		(token) => token.kind === "declaration",
-	);
+	const functionTokens = scanFunctions(source).filter((token) => token.kind === "declaration");
 	const declarations = functionTokens.map((token) => ({
 		name: token.name,
 		start: token.start,
@@ -93,7 +91,8 @@ function parseScript(uri: string, source: string): ProjectScriptSymbol {
 	}
 
 	const scriptAliases = new Map<string, string>();
-	const aliasPattern = /\b(?:const|var)\s+([A-Za-z_]\w*)\s*=\s*(?:preload|load)\(\s*["'](res:\/\/[^"']+\.gd)["']\s*\)/g;
+	const aliasPattern =
+		/\b(?:const|var)\s+([A-Za-z_]\w*)\s*=\s*(?:preload|load)\(\s*["'](res:\/\/[^"']+\.gd)["']\s*\)/g;
 	for (const match of source.matchAll(aliasPattern)) {
 		if (match.index === undefined || !/^(?:const|var)\b/.test(masked.slice(match.index))) {
 			continue;
@@ -191,24 +190,17 @@ export class ProjectSymbolIndex {
 		if (direct) {
 			return direct;
 		}
-		return script.extendsName
-			? this.resolveClassMethod(script.extendsName, methodName)
-			: undefined;
+		return script.extendsName ? this.resolveClassMethod(script.extendsName, methodName) : undefined;
 	}
 
-	resolveVariableType(
-		uri: string,
-		variableName: string,
-		enclosingFunction?: string,
-	): string | undefined {
+	resolveVariableType(uri: string, variableName: string, enclosingFunction?: string): string | undefined {
 		const script = this.scripts.get(uri);
 		if (!script) {
 			return undefined;
 		}
 		return (
-			(enclosingFunction
-				? script.scopedTypes.get(enclosingFunction)?.get(variableName)
-				: undefined) ?? script.memberTypes.get(variableName)
+			(enclosingFunction ? script.scopedTypes.get(enclosingFunction)?.get(variableName) : undefined) ??
+			script.memberTypes.get(variableName)
 		);
 	}
 
@@ -225,4 +217,3 @@ export class ProjectSymbolIndex {
 		}
 	}
 }
-

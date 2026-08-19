@@ -1,9 +1,5 @@
 import type { GodotApiIndex } from "./godot_api_index";
-import type {
-	LspCancellationToken,
-	LspOriginRequest,
-	LspOriginResolver,
-} from "./lsp_origin_resolver";
+import type { LspCancellationToken, LspOriginRequest, LspOriginResolver } from "./lsp_origin_resolver";
 import type { ProjectScriptSymbol, ProjectSymbolIndex } from "./project_symbol_index";
 import type { FunctionToken } from "./types";
 
@@ -23,10 +19,7 @@ export interface FunctionClassificationContext {
 	project: ProjectSymbolIndex;
 }
 
-function nativeBaseForType(
-	typeName: string | undefined,
-	context: FunctionClassificationContext,
-): string | undefined {
+function nativeBaseForType(typeName: string | undefined, context: FunctionClassificationContext): string | undefined {
 	const visited = new Set<string>();
 	let current = typeName;
 	while (current && !visited.has(current)) {
@@ -69,10 +62,7 @@ function classifyTypedReceiver(
 ): FunctionClassification | undefined {
 	const projectMethod = context.project.resolveClassMethod(typeName, methodName);
 	if (projectMethod) {
-		return project(
-			projectMethod.ownerClass ?? projectMethod.uri,
-			"project_receiver",
-		);
+		return project(projectMethod.ownerClass ?? projectMethod.uri, "project_receiver");
 	}
 
 	if (context.project.isProjectClass(typeName)) {
@@ -101,10 +91,7 @@ function classifyTypedReceiver(
 	return undefined;
 }
 
-export function classifyFunction(
-	token: FunctionToken,
-	context: FunctionClassificationContext,
-): FunctionClassification {
+export function classifyFunction(token: FunctionToken, context: FunctionClassificationContext): FunctionClassification {
 	const script = context.project.getScript(context.uri);
 	const nativeBase = nativeBaseForScript(script, context);
 
@@ -121,10 +108,7 @@ export function classifyFunction(
 	if (!token.receiver) {
 		const projectMethod = context.project.resolveMethodFromScript(context.uri, token.name);
 		if (projectMethod) {
-			return project(
-				projectMethod.ownerClass ?? projectMethod.uri,
-				"project_definition",
-			);
+			return project(projectMethod.ownerClass ?? projectMethod.uri, "project_definition");
 		}
 		if (context.api.hasUtilityFunction(token.name)) {
 			return system("GDScript", "utility_function");
@@ -176,11 +160,7 @@ export function classifyFunction(
 		return project(aliasUri, "script_alias_receiver");
 	}
 
-	const receiverType = context.project.resolveVariableType(
-		context.uri,
-		token.receiver,
-		token.enclosingFunction,
-	);
+	const receiverType = context.project.resolveVariableType(context.uri, token.receiver, token.enclosingFunction);
 	if (receiverType) {
 		const typed = classifyTypedReceiver(receiverType, token.name, context);
 		if (typed) {
@@ -221,4 +201,3 @@ export async function classifyFunctionWithLsp(
 	}
 	return initial;
 }
-

@@ -32,9 +32,7 @@ function definitionUris(value: unknown): string[] {
 		return [];
 	}
 	const location = value as { uri?: unknown; targetUri?: unknown };
-	return [location.uri, location.targetUri].filter(
-		(uri): uri is string => typeof uri === "string",
-	);
+	return [location.uri, location.targetUri].filter((uri): uri is string => typeof uri === "string");
 }
 
 function documentationOwner(uri: string): string | undefined {
@@ -67,14 +65,8 @@ export class LspOriginResolver {
 		private readonly options: LspOriginResolverOptions,
 	) {}
 
-	resolve(
-		request: LspOriginRequest,
-		cancellation?: LspCancellationToken,
-	): Promise<LspOriginResolution | undefined> {
-		if (
-			cancellation?.isCancellationRequested ||
-			this.options.getDocumentVersion(request.uri) !== request.version
-		) {
+	resolve(request: LspOriginRequest, cancellation?: LspCancellationToken): Promise<LspOriginResolution | undefined> {
+		if (cancellation?.isCancellationRequested || this.options.getDocumentVersion(request.uri) !== request.version) {
 			return Promise.resolve(undefined);
 		}
 		const key = `${request.uri}:${request.version}:${request.offset}`;
@@ -108,10 +100,7 @@ export class LspOriginResolver {
 			position: { line: request.line, character: request.character },
 		};
 		try {
-			const definition = await this.client.sendRequest(
-				"textDocument/definition",
-				params,
-			);
+			const definition = await this.client.sendRequest("textDocument/definition", params);
 			if (!this.isCurrent(request, cancellation)) {
 				return undefined;
 			}
@@ -136,14 +125,9 @@ export class LspOriginResolver {
 		}
 	}
 
-	private isCurrent(
-		request: LspOriginRequest,
-		cancellation?: LspCancellationToken,
-	): boolean {
+	private isCurrent(request: LspOriginRequest, cancellation?: LspCancellationToken): boolean {
 		return (
-			!cancellation?.isCancellationRequested &&
-			this.options.getDocumentVersion(request.uri) === request.version
+			!cancellation?.isCancellationRequested && this.options.getDocumentVersion(request.uri) === request.version
 		);
 	}
 }
-

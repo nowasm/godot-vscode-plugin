@@ -1,10 +1,6 @@
 import { strictEqual } from "node:assert";
 
-import {
-	EXTENSION_ID,
-	HIGHLIGHT_CONFIG_PREFIX,
-	UPSTREAM_COMMAND_PREFIX,
-} from "./extension_identity";
+import { EXTENSION_ID, HIGHLIGHT_CONFIG_PREFIX, UPSTREAM_COMMAND_PREFIX } from "./extension_identity";
 
 suite("extension identity", () => {
 	test("uses a fork ID while preserving upstream commands", () => {

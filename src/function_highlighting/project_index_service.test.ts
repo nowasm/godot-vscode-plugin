@@ -27,10 +27,7 @@ class FakeWorkspace implements ProjectWorkspaceAdapter {
 		return document;
 	}
 
-	watch(
-		onChange: (document: WorkspaceScriptDocument) => void,
-		onDelete: (uri: string) => void,
-	) {
+	watch(onChange: (document: WorkspaceScriptDocument) => void, onDelete: (uri: string) => void) {
 		this.changeListener = onChange;
 		this.deleteListener = onDelete;
 		return { dispose() {} };
@@ -87,4 +84,3 @@ suite("ProjectIndexService", () => {
 		service.dispose();
 	});
 });
-

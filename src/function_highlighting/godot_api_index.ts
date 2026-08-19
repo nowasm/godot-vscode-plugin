@@ -43,14 +43,10 @@ export class GodotApiIndex {
 
 	private constructor(api: GodotApiDump) {
 		const header = api.header ?? {};
-		const numericVersion = [
-			header.version_major ?? 0,
-			header.version_minor ?? 0,
-			header.version_patch ?? 0,
-		].join(".");
-		this.version = header.version_status
-			? `${numericVersion}-${header.version_status}`
-			: numericVersion;
+		const numericVersion = [header.version_major ?? 0, header.version_minor ?? 0, header.version_patch ?? 0].join(
+			".",
+		);
+		this.version = header.version_status ? `${numericVersion}-${header.version_status}` : numericVersion;
 		this.cacheKey = this.version.replace(/[^A-Za-z0-9._-]/g, "-");
 		this.utilityFunctions = methodNames(api.utility_functions);
 
@@ -118,11 +114,7 @@ export class GodotApiIndex {
 		return this.nativeParents.get(typeName);
 	}
 
-	private findOwner(
-		index: Map<string, Set<string>>,
-		typeName: string,
-		methodName: string,
-	): string | undefined {
+	private findOwner(index: Map<string, Set<string>>, typeName: string, methodName: string): string | undefined {
 		const visited = new Set<string>();
 		let current: string | undefined = typeName;
 		while (current && !visited.has(current)) {

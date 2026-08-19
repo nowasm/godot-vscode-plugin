@@ -1,9 +1,6 @@
 import { strictEqual } from "node:assert";
 
-import {
-	LspOriginResolver,
-	type LspRequestClient,
-} from "./lsp_origin_resolver";
+import { LspOriginResolver, type LspRequestClient } from "./lsp_origin_resolver";
 
 class FakeClient implements LspRequestClient {
 	readonly calls: string[] = [];
@@ -75,4 +72,3 @@ suite("LspOriginResolver", () => {
 		);
 	});
 });
-

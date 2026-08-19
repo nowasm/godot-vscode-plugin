@@ -1,11 +1,7 @@
 import { deepStrictEqual, strictEqual } from "node:assert";
 import * as path from "node:path";
 
-import {
-	type ApiFileSystem,
-	type ApiProcessRunner,
-	loadGodotApi,
-} from "./godot_api_loader";
+import { type ApiFileSystem, type ApiProcessRunner, loadGodotApi } from "./godot_api_loader";
 
 const API_JSON = JSON.stringify({
 	header: {
@@ -144,11 +140,8 @@ suite("GodotApiLoader", () => {
 		strictEqual(result.source, "fallback");
 		strictEqual(result.warning?.includes("cannot start Godot"), true);
 		strictEqual(
-			fileSystem.touched.every(
-				(filePath) => filePath.startsWith(cacheDir) || filePath === bundledSnapshotPath,
-			),
+			fileSystem.touched.every((filePath) => filePath.startsWith(cacheDir) || filePath === bundledSnapshotPath),
 			true,
 		);
 	});
 });
-

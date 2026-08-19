@@ -18,10 +18,7 @@ const API_FIXTURE = {
 		{
 			name: "Node",
 			inherits: "Object",
-			methods: [
-				{ name: "_ready", is_virtual: true },
-				{ name: "add_child" },
-			],
+			methods: [{ name: "_ready", is_virtual: true }, { name: "add_child" }],
 		},
 	],
 };
@@ -55,10 +52,7 @@ suite("GodotApiIndex", () => {
 	});
 
 	test("loads the bundled Godot 4.6 snapshot", () => {
-		const snapshot = fs.readFileSync(
-			path.join(process.cwd(), "resources", "godot_api", "godot-4.6.json"),
-			"utf8",
-		);
+		const snapshot = fs.readFileSync(path.join(process.cwd(), "resources", "godot_api", "godot-4.6.json"), "utf8");
 		const index = GodotApiIndex.fromJson(snapshot);
 
 		strictEqual(index.version, "4.6.2-stable");
