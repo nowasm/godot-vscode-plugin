@@ -37,7 +37,7 @@ Results:
 - TypeScript compile: pass.
 - Biome lint: pass with zero errors; 12 pre-existing upstream
   `noParameterAssign` warnings remain.
-- Function-highlighting pure tests: scanner, API cache/fallback, project index,
+- Function-highlighting pure tests: `36 passing`; scanner, API cache/fallback, project index,
   classifier, LSP timeout/staleness, manifest, status, and integration fixture pass.
 - Complete local VS Code suite: `99 passing`, including upstream formatter
   snapshots and real Godot DAP variable tests.
@@ -102,8 +102,8 @@ excluded from the VSIX.
 Final artifact:
 
 - File: `godparty-godot-tools-0.1.0.vsix`
-- Size: `915699` bytes
-- SHA-256: `B5D1BA701475AD3D9F0B930B987E3A23173D6BBB4D9BE5A6809F63FDA3E1B2B9`
+- Size: `915721` bytes
+- SHA-256: `82A30498B3475ECC324667F7A560B732FBA1325FB75E2636EAFCCB7354E0F13B`
 
 ## Known classification boundary
 

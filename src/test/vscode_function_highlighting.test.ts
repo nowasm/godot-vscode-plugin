@@ -54,14 +54,8 @@ suite("GodParty function highlighting in VS Code", () => {
 
 	test("toggles highlighting at workspace scope", async () => {
 		await vscode.commands.executeCommand(TOGGLE_COMMAND);
-		strictEqual(
-			vscode.workspace.getConfiguration("godpartyGodotTools.functionHighlight").get("enabled"),
-			false,
-		);
+		strictEqual(vscode.workspace.getConfiguration("godpartyGodotTools.functionHighlight").get("enabled"), false);
 		await vscode.commands.executeCommand(TOGGLE_COMMAND);
-		strictEqual(
-			vscode.workspace.getConfiguration("godpartyGodotTools.functionHighlight").get("enabled"),
-			true,
-		);
+		strictEqual(vscode.workspace.getConfiguration("godpartyGodotTools.functionHighlight").get("enabled"), true);
 	});
 });

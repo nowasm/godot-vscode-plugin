@@ -7,18 +7,11 @@ async function main(): Promise<void> {
 	const godpartySmoke = process.argv.includes("--godparty");
 	const allTests = process.argv.includes("--all");
 	const godotPath =
-		process.env.GODPARTY_GODOT_PATH ??
-		"D:\\work_mine\\godparty\\GodotEditor\\Godot_v4.6.2-stable_win64.exe";
+		process.env.GODPARTY_GODOT_PATH ?? "D:\\work_mine\\godparty\\GodotEditor\\Godot_v4.6.2-stable_win64.exe";
 	const vscodeExecutablePath =
-		process.env.GODPARTY_VSCODE_PATH ??
-		"C:\\Users\\john\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe";
+		process.env.GODPARTY_VSCODE_PATH ?? "C:\\Users\\john\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe";
 	if (allTests) {
-		const settingsDirectory = path.join(
-			root,
-			"test_projects",
-			"test-dap-project-godot4",
-			".vscode",
-		);
+		const settingsDirectory = path.join(root, "test_projects", "test-dap-project-godot4", ".vscode");
 		fs.mkdirSync(settingsDirectory, { recursive: true });
 		fs.writeFileSync(
 			path.join(settingsDirectory, "settings.json"),
@@ -43,8 +36,8 @@ async function main(): Promise<void> {
 			allTests
 				? path.join(root, "test_projects", "test-dap-project-godot4")
 				: godpartySmoke
-				? "D:\\work_mine\\godparty\\GodClient"
-				: path.join(root, "test_projects", "function-highlighting"),
+					? "D:\\work_mine\\godparty\\GodClient"
+					: path.join(root, "test_projects", "function-highlighting"),
 			"--disable-extensions",
 		],
 	});

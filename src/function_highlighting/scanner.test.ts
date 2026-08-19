@@ -69,4 +69,20 @@ func run() -> void:
 			],
 		);
 	});
+
+	test("does not treat parenthesized boolean operators as function calls", () => {
+		const source = `func _input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.pressed \\
+			and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
+		_spawn((event as InputEventMouseButton).position)
+`;
+
+		deepStrictEqual(
+			scanFunctions(source).map(({ name, kind }) => ({ name, kind })),
+			[
+				{ name: "_input", kind: "declaration" },
+				{ name: "_spawn", kind: "call" },
+			],
+		);
+	});
 });

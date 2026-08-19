@@ -8,9 +8,7 @@ function collectTests(directory: string): string[] {
 		if (entry.isDirectory()) {
 			return collectTests(fullPath);
 		}
-		return entry.name.endsWith(".test.js") && !fullPath.includes(`${path.sep}test${path.sep}`)
-			? [fullPath]
-			: [];
+		return entry.name.endsWith(".test.js") && !fullPath.includes(`${path.sep}test${path.sep}`) ? [fullPath] : [];
 	});
 }
 
