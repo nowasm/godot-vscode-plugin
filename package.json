@@ -41,6 +41,7 @@
 		"esbuild": "npm run esbuild-base -- --sourcemap",
 		"esbuild-watch": "npm run esbuild-base -- --sourcemap --watch",
 		"generate-icons": "ts-node tools/generate_icons.ts",
+		"generate-api-snapshot": "ts-node tools/generate_godot_api_snapshot.ts",
 		"test": "vscode-test",
 		"test:headless": "WAYLAND_DISPLAY= xvfb-run --auto-servernum --server-args='-screen 0 1024x768x24 -ac +extension GLX' npm test",
 		"test:engine": "ts-node tools/run_tests.ts"

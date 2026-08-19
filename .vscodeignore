@@ -4,6 +4,7 @@
 !out/extension.js
 !syntaxes/*.tmLanguage.json
 !resources/
+!resources/**
 !media/
 !configurations/
 !package.json
