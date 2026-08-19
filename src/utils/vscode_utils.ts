@@ -1,6 +1,8 @@
 import * as vscode from "vscode";
 
-const EXTENSION_PREFIX = "godotTools";
+import { EXTENSION_ID, UPSTREAM_COMMAND_PREFIX } from "./extension_identity";
+
+const EXTENSION_PREFIX = UPSTREAM_COMMAND_PREFIX;
 
 export function get_configuration(name: string, defaultValue?: any) {
 	const configValue = vscode.workspace.getConfiguration(EXTENSION_PREFIX).get(name, null);
@@ -25,9 +27,9 @@ export function register_command(command: string, callback: (...args: any[]) => 
 }
 
 export function get_extension_uri(...paths: string[]) {
-	const extension = vscode.extensions.getExtension("geequlim.godot-tools");
+	const extension = vscode.extensions.getExtension(EXTENSION_ID);
 	if (!extension) {
-		throw new Error("Extension 'geequlim.godot-tools' not found");
+		throw new Error(`Extension '${EXTENSION_ID}' not found`);
 	}
 	return vscode.Uri.joinPath(extension.extensionUri, ...paths);
 }
