@@ -1,536 +1,187 @@
 import * as fs from "node:fs";
-import {
-	Breakpoint,
-	InitializedEvent,
-	LoggingDebugSession,
-	Source,
-	TerminatedEvent,
-	Thread,
-} from "@vscode/debugadapter";
+import { Breakpoint, InitializedEvent, LoggingDebugSession, Source, StoppedEvent, TerminatedEvent, Thread } from "@vscode/debugadapter";
 import { DebugProtocol } from "@vscode/debugprotocol";
 import { Subject } from "await-notify";
-import { debug } from "vscode";
-import { createLogger } from "../../utils";
-import { GodotDebugData, GodotStackVars, GodotVariable } from "../debug_runtime";
+import { GodotDebugData, GodotVariable } from "../debug_runtime";
 import { AttachRequestArguments, LaunchRequestArguments } from "../debugger";
 import { InspectorProvider } from "../inspector_provider";
 import { SceneTreeProvider } from "../scene_tree_provider";
-import { is_variable_built_in_type, parse_variable } from "./helpers";
-import { ServerController } from "./server_controller";
-import { ObjectId } from "./variables/variants";
-
-const log = createLogger("debugger.session", { output: "Godot Debugger" });
-
-interface Variable {
-	variable: GodotVariable | undefined;
-	index: number | undefined;
-	object_id: number | undefined;
-}
+import { build_sub_values } from "./helpers";
+import { ServerController } from "./server_controller_v2";
+import { RawObject } from "./variables/variants";
 
 export class GodotDebugSession extends LoggingDebugSession {
-	private all_scopes: (GodotVariable | undefined)[];
 	public controller = new ServerController(this);
 	public debug_data = new GodotDebugData(this);
 	public sceneTree: SceneTreeProvider;
 	public inspector: InspectorProvider;
-	private got_scope: Subject = new Subject();
-	private ongoing_inspections: bigint[] = [];
-	private previous_inspections: bigint[] = [];
-	private configuration_done: Subject = new Subject();
+	public inspect_callbacks = new Map<bigint, (className: string, variable: GodotVariable) => void>();
+	private configurationDone = new Subject();
 	private mode: "launch" | "attach" | "" = "";
-	public inspect_callbacks: Map<bigint, (class_name: string, variable: GodotVariable) => void> = new Map();
+	private nextReference = 1;
+	private referenceToHandle = new Map<number, bigint>();
+	private handleToReference = new Map<bigint, number>();
 
 	public constructor() {
 		super();
-
 		this.setDebuggerLinesStartAt1(false);
 		this.setDebuggerColumnsStartAt1(false);
 	}
 
-	public dispose() {
-		this.controller.stop();
-	}
+	public dispose() { this.controller.stop(); }
 
-	protected initializeRequest(
-		response: DebugProtocol.InitializeResponse,
-		args: DebugProtocol.InitializeRequestArguments,
-	) {
+	protected initializeRequest(response: DebugProtocol.InitializeResponse) {
 		response.body = response.body || {};
-
 		response.body.supportsConfigurationDoneRequest = true;
 		response.body.supportsTerminateRequest = true;
 		response.body.supportsEvaluateForHovers = false;
 		response.body.supportsStepBack = false;
-		response.body.supportsGotoTargetsRequest = false;
-		response.body.supportsCancelRequest = false;
-		response.body.supportsCompletionsRequest = false;
 		response.body.supportsFunctionBreakpoints = false;
-		response.body.supportsDataBreakpoints = false;
-		response.body.supportsBreakpointLocationsRequest = false;
 		response.body.supportsConditionalBreakpoints = false;
-		response.body.supportsHitConditionalBreakpoints = false;
-		response.body.supportsLogPoints = false;
-		response.body.supportsModulesRequest = false;
-		response.body.supportsReadMemoryRequest = false;
-		response.body.supportsRestartFrame = false;
-		response.body.supportsRestartRequest = false;
-		response.body.supportsSetExpression = false;
-		response.body.supportsStepInTargetsRequest = false;
-		response.body.supportsTerminateThreadsRequest = false;
-
+		(response.body as any).supportsVariablePaging = true;
 		this.sendResponse(response);
 		this.sendEvent(new InitializedEvent());
 	}
 
 	protected async launchRequest(response: DebugProtocol.LaunchResponse, args: LaunchRequestArguments) {
-		await this.configuration_done.wait(1000);
-
+		await this.configurationDone.wait(1000);
 		this.mode = "launch";
-
 		this.debug_data.projectPath = args.project;
-		await this.controller.launch(args);
-
-		this.sendResponse(response);
+		try { await this.controller.launch(args); this.sendResponse(response); } catch (error) { this.fail(response, error); }
 	}
 
 	protected async attachRequest(response: DebugProtocol.AttachResponse, args: AttachRequestArguments) {
-		await this.configuration_done.wait(1000);
-
+		await this.configurationDone.wait(1000);
 		this.mode = "attach";
+		try { await this.controller.attach(args); this.sendResponse(response); } catch (error) { this.fail(response, error); }
+	}
 
-		await this.controller.attach(args);
-
+	public configurationDoneRequest(response: DebugProtocol.ConfigurationDoneResponse) {
+		this.configurationDone.notify();
 		this.sendResponse(response);
 	}
 
-	public configurationDoneRequest(
-		response: DebugProtocol.ConfigurationDoneResponse,
-		args: DebugProtocol.ConfigurationDoneArguments,
-	) {
-		this.configuration_done.notify();
-		this.sendResponse(response);
+	public onStopped(_stopId: bigint, _canContinue: boolean, error: string, isError: boolean) {
+		this.nextReference = 1;
+		this.referenceToHandle.clear();
+		this.handleToReference.clear();
+		this.sendEvent(new StoppedEvent(isError || error ? "exception" : "breakpoint", 0, error || undefined));
 	}
 
-	protected continueRequest(response: DebugProtocol.ContinueResponse, args: DebugProtocol.ContinueArguments) {
+	protected async continueRequest(response: DebugProtocol.ContinueResponse) {
 		response.body = { allThreadsContinued: true };
-		this.controller.continue();
-		this.sendResponse(response);
+		await this.execution(response, () => this.controller.continue());
+	}
+	protected async nextRequest(response: DebugProtocol.NextResponse) { await this.execution(response, () => this.controller.next()); }
+	protected async pauseRequest(response: DebugProtocol.PauseResponse) { await this.execution(response, () => this.controller.break()); }
+	protected async stepInRequest(response: DebugProtocol.StepInResponse) { await this.execution(response, () => this.controller.step()); }
+	protected async stepOutRequest(response: DebugProtocol.StepOutResponse) { await this.execution(response, () => this.controller.step_out()); }
+
+	private async execution(response: DebugProtocol.Response, action: () => Promise<number>) {
+		try {
+			const latency = await action();
+			response.message = `Godot acknowledged in ${latency.toFixed(1)} ms`;
+			this.sendResponse(response);
+		} catch (error) { this.fail(response, error); }
 	}
 
-	protected async evaluateRequest(response: DebugProtocol.EvaluateResponse, args: DebugProtocol.EvaluateArguments) {
-		await debug.activeDebugSession?.customRequest("scopes", { frameId: 0 });
-
-		if (this.all_scopes) {
-			try {
-				const variable = this.get_variable(args.expression, undefined, 0, undefined);
-				if (variable.variable && variable.index !== undefined) {
-					const parsed_variable = parse_variable(variable.variable);
-					response.body = {
-						result: parsed_variable.value,
-						variablesReference: !is_variable_built_in_type(variable.variable) ? variable.index : 0,
-					};
-				}
-			} catch (error) {
-				response.success = false;
-				response.message = (error as Error).toString();
-			}
-		}
-
-		if (!response.body) {
+	protected async stackTraceRequest(response: DebugProtocol.StackTraceResponse, args: DebugProtocol.StackTraceArguments) {
+		try {
+			const payload = await this.controller.request_stack_trace(args.startFrame ?? 0, args.levels ?? 100);
+			const frames = Array.isArray(payload[1]) ? payload[1] : [];
 			response.body = {
-				result: "null",
-				variablesReference: 0,
+				totalFrames: Number(payload[0] ?? 0),
+				stackFrames: frames.map((frame: any[]) => ({
+					id: Number(frame[0]), name: String(frame[3]), line: Number(frame[2]), column: 1,
+					source: new Source(String(frame[1]), `${this.debug_data.projectPath}/${String(frame[1]).replace("res://", "")}`),
+				})),
 			};
-		}
-
-		this.sendResponse(response);
-	}
-
-	protected nextRequest(response: DebugProtocol.NextResponse, args: DebugProtocol.NextArguments) {
-		this.controller.next();
-		this.sendResponse(response);
-	}
-
-	protected pauseRequest(response: DebugProtocol.PauseResponse, args: DebugProtocol.PauseArguments) {
-		this.controller.break();
-		this.sendResponse(response);
+			this.sendResponse(response);
+		} catch (error) { this.fail(response, error); }
 	}
 
 	protected async scopesRequest(response: DebugProtocol.ScopesResponse, args: DebugProtocol.ScopesArguments) {
-		this.controller.request_stack_frame_vars(args.frameId);
-		await this.got_scope.wait(2000);
-
-		response.body = {
-			scopes: [
-				{ name: "Locals", variablesReference: 1, expensive: false },
-				{ name: "Members", variablesReference: 2, expensive: false },
-				{ name: "Globals", variablesReference: 3, expensive: false },
-			],
-		};
-		this.sendResponse(response);
-	}
-
-	protected setBreakPointsRequest(
-		response: DebugProtocol.SetBreakpointsResponse,
-		args: DebugProtocol.SetBreakpointsArguments,
-	) {
-		const path = (args.source.path as string)?.replace(/\\/g, "/");
-		const client_lines = args.lines || [];
-
-		if (path && fs.existsSync(path)) {
-			let bps = this.debug_data.get_breakpoints(path);
-			const bp_lines = bps.map((bp) => bp.line);
-
-			for (const bp of bps) {
-				if (client_lines.indexOf(bp.line) === -1) {
-					this.debug_data.remove_breakpoint(path, bp.line);
-				}
-			}
-			for (const l of client_lines) {
-				if (bp_lines.indexOf(l) === -1) {
-					const bp = args.breakpoints?.find((bp_at_line) => bp_at_line.line === l);
-					if (bp && !bp.condition) {
-						this.debug_data.set_breakpoint(path, l);
-					}
-				}
-			}
-
-			bps = this.debug_data.get_breakpoints(path);
-			// Sort to ensure breakpoints aren't out-of-order, which would confuse VS Code.
-			bps.sort((a, b) => (a.line < b.line ? -1 : 1));
-
-			response.body = {
-				breakpoints: bps.map((bp) => {
-					return new Breakpoint(true, bp.line, 1, new Source(bp.file.split("/").reverse()[0], bp.file));
-				}),
-			};
-
+		try {
+			const payload = await this.controller.request_scopes(args.frameId);
+			const scopes = Array.isArray(payload[0]) ? payload[0] : [];
+			response.body = { scopes: scopes.map((scope: any[]) => ({ name: String(scope[0]), variablesReference: this.reference(BigInt(scope[1])), expensive: Boolean(scope[2]) })) };
 			this.sendResponse(response);
-		}
+		} catch (error) { this.fail(response, error); }
 	}
 
-	protected stackTraceRequest(response: DebugProtocol.StackTraceResponse, args: DebugProtocol.StackTraceArguments) {
-		if (this.debug_data.last_frame) {
-			response.body = {
-				totalFrames: this.debug_data.last_frames.length,
-				stackFrames: this.debug_data.last_frames.map((sf) => {
-					return {
-						id: sf.id,
-						name: sf.function,
-						line: sf.line,
-						column: 1,
-						source: new Source(sf.file, `${this.debug_data.projectPath}/${sf.file.replace("res://", "")}`),
-					};
-				}),
-			};
-		}
-		this.sendResponse(response);
-	}
-
-	protected stepInRequest(response: DebugProtocol.StepInResponse, args: DebugProtocol.StepInArguments) {
-		this.controller.step();
-		this.sendResponse(response);
-	}
-
-	protected stepOutRequest(response: DebugProtocol.StepOutResponse, args: DebugProtocol.StepOutArguments) {
-		this.controller.step_out();
-		this.sendResponse(response);
-	}
-
-	protected terminateRequest(response: DebugProtocol.TerminateResponse, args: DebugProtocol.TerminateArguments) {
-		if (this.mode === "launch") {
-			this.controller.stop();
-			this.sendEvent(new TerminatedEvent());
-		}
-		this.sendResponse(response);
-	}
-
-	protected threadsRequest(response: DebugProtocol.ThreadsResponse) {
-		response.body = { threads: [new Thread(0, "thread_1")] };
-		this.sendResponse(response);
-	}
-
-	protected async variablesRequest(
-		response: DebugProtocol.VariablesResponse,
-		args: DebugProtocol.VariablesArguments,
-	) {
-		if (!this.all_scopes) {
-			response.body = {
-				variables: [],
-			};
+	protected async variablesRequest(response: DebugProtocol.VariablesResponse, args: DebugProtocol.VariablesArguments) {
+		const handle = this.referenceToHandle.get(args.variablesReference);
+		if (handle === undefined) { response.body = { variables: [] }; this.sendResponse(response); return; }
+		try {
+			const payload = await this.controller.request_variables(handle, args.start ?? 0, args.count ?? 100);
+			const items = Array.isArray(payload[2]) ? payload[2] : [];
+			response.body = { variables: items.map((item: any[]) => this.variable(item)) };
 			this.sendResponse(response);
-			return;
-		}
+		} catch (error) { this.fail(response, error); }
+	}
 
-		const reference = this.all_scopes[args.variablesReference];
-		let variables: DebugProtocol.Variable[];
-
-		if (!reference || !reference.sub_values) {
-			variables = [];
-		} else {
-			variables = reference.sub_values.map((va): DebugProtocol.Variable | undefined => {
-				const sva = this.all_scopes.find(
-					(sva) => sva && sva.scope_path === va.scope_path && sva.name === va.name,
-				);
-				if (sva) {
-					return parse_variable(
-						sva,
-						this.all_scopes.findIndex(
-							(va_idx) =>
-								va_idx &&
-								va_idx.scope_path === `${reference.scope_path}.${reference.name}` &&
-								va_idx.name === va.name,
-						),
-					);
-				}
-			}).filter((v): v is DebugProtocol.Variable => v !== undefined);
-		}
-
-		response.body = {
-			variables: variables,
+	private variable(item: any[]): DebugProtocol.Variable {
+		const handle = BigInt(item[3]);
+		const indexed = Number(item[4]);
+		const named = Number(item[5]);
+		return {
+			name: String(item[0]), type: String(item[1]), value: String(item[2]),
+			variablesReference: handle === 0n ? 0 : this.reference(handle),
+			indexedVariables: indexed || undefined, namedVariables: named || undefined,
 		};
+	}
 
+	private reference(handle: bigint) {
+		const existing = this.handleToReference.get(handle);
+		if (existing !== undefined) return existing;
+		const reference = this.nextReference++;
+		this.handleToReference.set(handle, reference);
+		this.referenceToHandle.set(reference, handle);
+		return reference;
+	}
+
+	protected setBreakPointsRequest(response: DebugProtocol.SetBreakpointsResponse, args: DebugProtocol.SetBreakpointsArguments) {
+		const path = args.source.path?.replace(/\\/g, "/");
+		if (!path || !fs.existsSync(path)) { response.body = { breakpoints: [] }; this.sendResponse(response); return; }
+		const requested = args.lines || [];
+		for (const breakpoint of this.debug_data.get_breakpoints(path)) if (!requested.includes(breakpoint.line)) this.debug_data.remove_breakpoint(path, breakpoint.line);
+		const existing = this.debug_data.get_breakpoints(path).map((breakpoint) => breakpoint.line);
+		for (const line of requested) {
+			const item = args.breakpoints?.find((breakpoint) => breakpoint.line === line);
+			if (!existing.includes(line) && !item?.condition) this.debug_data.set_breakpoint(path, line);
+		}
+		const breakpoints = this.debug_data.get_breakpoints(path).sort((a, b) => a.line - b.line);
+		response.body = { breakpoints: breakpoints.map((breakpoint) => new Breakpoint(true, breakpoint.line, 1, new Source(breakpoint.file.split("/").pop() || "", breakpoint.file))) };
 		this.sendResponse(response);
 	}
 
-	public set_scopes(stackVars: GodotStackVars) {
-		this.all_scopes = [
-			undefined,
-			{
-				name: "local",
-				value: undefined,
-				sub_values: stackVars.locals,
-				scope_path: "@",
-			},
-			{
-				name: "member",
-				value: undefined,
-				sub_values: stackVars.members,
-				scope_path: "@",
-			},
-			{
-				name: "global",
-				value: undefined,
-				sub_values: stackVars.globals,
-				scope_path: "@",
-			},
-		];
-
-		for (const va of stackVars.locals) {
-			va.scope_path = "@.local";
-			this.append_variable(va);
-		}
-
-		for (const va of stackVars.members) {
-			va.scope_path = "@.member";
-			this.append_variable(va);
-		}
-
-		for (const va of stackVars.globals) {
-			va.scope_path = "@.global";
-			this.append_variable(va);
-		}
-
-		this.add_to_inspections();
-
-		if (this.ongoing_inspections.length === 0) {
-			this.previous_inspections = [];
-			this.got_scope.notify();
-		}
+	protected threadsRequest(response: DebugProtocol.ThreadsResponse) { response.body = { threads: [new Thread(0, "Main Thread")] }; this.sendResponse(response); }
+	protected evaluateRequest(response: DebugProtocol.EvaluateResponse) {
+		response.success = false;
+		response.message = "Evaluation is disabled in protocol v2; expand the required scope lazily.";
+		response.body = { result: "null", variablesReference: 0 };
+		this.sendResponse(response);
+	}
+	protected terminateRequest(response: DebugProtocol.TerminateResponse) {
+		if (this.mode === "launch") { this.controller.stop(); this.sendEvent(new TerminatedEvent()); }
+		this.sendResponse(response);
 	}
 
-	public set_inspection(id: bigint, replacement: GodotVariable) {
-		const variables = this.all_scopes.filter((va) => va && va.value instanceof ObjectId && va.value.id === id);
-
-		for (const va of variables) {
-			const index = this.all_scopes.findIndex((va_id) => va_id === va);
-			const old = this.all_scopes.splice(index, 1);
-			if (old[0]) {
-				replacement.name = old[0].name;
-				replacement.scope_path = old[0].scope_path;
-			}
-			this.append_variable(replacement, index);
-		}
-
-		this.ongoing_inspections.splice(
-			this.ongoing_inspections.findIndex((va_id) => va_id === id),
-			1,
-		);
-
-		this.previous_inspections.push(id);
-
-		// this.add_to_inspections();
-
-		if (this.ongoing_inspections.length === 0) {
-			this.previous_inspections = [];
-			this.got_scope.notify();
-		}
+	public acceptInspection(objectId: bigint, payload: any[]) {
+		const id = BigInt(payload[0] ?? objectId);
+		const className = String(payload[1] ?? "Object");
+		const properties = Array.isArray(payload[2]) ? payload[2] : [];
+		const object = new RawObject(className);
+		for (const property of properties) if (Array.isArray(property) && property.length >= 6) object.set(property[0], property[5]);
+		const variable: GodotVariable = { name: "", value: object };
+		build_sub_values(variable);
+		this.inspect_callbacks.get(id)?.(className, variable);
+		this.inspect_callbacks.delete(id);
 	}
 
-	private add_to_inspections() {
-		for (const va of this.all_scopes) {
-			if (va && va.value instanceof ObjectId) {
-				if (
-					!this.ongoing_inspections.includes(va.value.id) &&
-					!this.previous_inspections.includes(va.value.id)
-				) {
-					this.controller.request_inspect_object(va.value.id);
-					this.ongoing_inspections.push(va.value.id);
-				}
-			}
-		}
-	}
-
-	protected get_variable(
-		expression: string,
-		root?: GodotVariable,
-		index = 0,
-		object_id?: number,
-	): Variable {
-		let result: Variable = {
-			variable: undefined,
-			index: undefined,
-			object_id: undefined,
-		};
-
-		if (!root) {
-			if (!expression.includes("self")) {
-				expression = `self.${expression}`;
-			}
-
-			root = this.all_scopes.find((x) => x && x.name === "self");
-			const idVar = this.all_scopes.find((x) => x && x.name === "id" && x.scope_path === "@.member.self");
-			object_id = idVar ? idVar.value : undefined;
-		}
-
-		if (!root) {
-			throw new Error("Could not find root scope");
-		}
-
-		const items = expression.split(".");
-		let propertyName = items[index + 1];
-		let path = items
-			.slice(0, index + 1)
-			.join(".")
-			.split("self.")
-			.join("")
-			.split("self")
-			.join("")
-			.split("[")
-			.join(".")
-			.split("]")
-			.join("");
-
-		if (items.length === 1 && items[0] === "self") {
-			propertyName = "self";
-		}
-
-		// Detect index/key
-		let key = (propertyName.match(/(?<=\[).*(?=\])/) || [null])[0];
-		if (key) {
-			key = key.replace(/['"]+/g, "");
-			propertyName = propertyName
-				.split(/(?<=\[).*(?=\])/)
-				.join("")
-				.split("[]")
-				.join("");
-			if (path) path += ".";
-			path += propertyName;
-			propertyName = key;
-		}
-
-		function sanitizeName(name: string) {
-			return name.split("Members/").join("").split("Locals/").join("");
-		}
-
-		function sanitizeScopePath(scope_path: string) {
-			return scope_path
-				.split("@.member.self.")
-				.join("")
-				.split("@.member.self")
-				.join("")
-				.split("@.member.")
-				.join("")
-				.split("@.member")
-				.join("")
-				.split("@.local.")
-				.join("")
-				.split("@.local")
-				.join("")
-				.split("Locals/")
-				.join("")
-				.split("Members/")
-				.join("")
-				.split("@")
-				.join("");
-		}
-
-		const sanitized_all_scopes = this.all_scopes
-			.filter((x): x is NonNullable<typeof x> => x !== undefined)
-			.map((x) => ({
-				sanitized: {
-					name: sanitizeName(x.name),
-					scope_path: sanitizeScopePath(x.scope_path || ""),
-				},
-				real: x,
-			}));
-
-		result.variable = sanitized_all_scopes.find(
-			(x) => x.sanitized.name === propertyName && x.sanitized.scope_path === path,
-		)?.real;
-		if (!result.variable) {
-			throw new Error(`Could not find: ${propertyName}`);
-		}
-
-		if (root.value && typeof root.value.entries === "function") {
-			if (result.variable && result.variable.name === "self") {
-				const idVar = this.all_scopes.find(
-					(x) => x && x.name === "id" && x.scope_path === "@.member.self",
-				);
-				result.object_id = idVar ? idVar.value : undefined;
-			} else if (key) {
-				const collection = path.split(".")[path.split(".").length - 1];
-				const collection_items = Array.from((root.value as any).entries()).find(
-					(x: any) => x && x[0].split("Members/").join("").split("Locals/").join("") === collection,
-				)?.[1];
-				result.object_id = collection_items.get ? collection_items.get(key)?.id : collection_items[key]?.id;
-			} else {
-				const item = Array.from(root.value.entries()).find(
-					(x: any) => x && x[0].split("Members/").join("").split("Locals/").join("") === propertyName,
-				);
-				result.object_id = (item as any)?.[1].id;
-			}
-		}
-
-		if (!result.object_id) {
-			result.object_id = object_id;
-		}
-
-		if (result.variable) {
-			result.index = this.all_scopes.findIndex(
-				(x) => x && x.name === result.variable?.name && x.scope_path === result.variable?.scope_path,
-			);
-		}
-
-		if (items.length > 2 && index < items.length - 2) {
-			result = this.get_variable(items.join("."), result.variable, index + 1, result.object_id);
-		}
-
-		return result;
-	}
-
-	private append_variable(variable: GodotVariable, index?: number) {
-		if (index) {
-			this.all_scopes.splice(index, 0, variable);
-		} else {
-			this.all_scopes.push(variable);
-		}
-		const base_path = `${variable.scope_path}.${variable.name}`;
-		if (variable.sub_values) {
-			variable.sub_values.forEach((va, i) => {
-				va.scope_path = base_path;
-				this.append_variable(va, index ? index + i + 1 : undefined);
-			});
-		}
+	private fail(response: DebugProtocol.Response, error: unknown) {
+		response.success = false;
+		response.message = error instanceof Error ? error.message : String(error);
+		this.sendResponse(response);
 	}
 }
