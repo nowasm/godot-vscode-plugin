@@ -203,6 +203,9 @@ export class ServerController {
 			void this.handleError(message.payload);
 		} else if (message.type === "data_drop_summary") {
 			this.stderr(`[debugger] dropped ${message.payload[0]} data messages (${message.payload[1]} bytes); queue=${message.payload[2]} bytes\n`);
+		} else if (message.type === "noncontinuable_error") {
+			const top = Array.isArray(message.payload[1]) && message.payload[1].length ? ` at ${message.payload[1][0][0]}:${message.payload[1][0][1]}` : "";
+			this.stderr(`[debugger] non-continuable script error (execution was not left paused): ${message.payload[0]}${top}\n`);
 		} else if (message.type === "kill_me") {
 			this.abort();
 		}

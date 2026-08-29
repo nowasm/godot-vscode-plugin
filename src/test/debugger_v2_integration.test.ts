@@ -6,6 +6,11 @@ function percentile95(values: number[]) {
 	return ordered[Math.max(0, Math.ceil(ordered.length * 0.95) - 1)];
 }
 
+function percentile50(values: number[]) {
+	const ordered = [...values].sort((a, b) => a - b);
+	return ordered[Math.floor(ordered.length / 2)];
+}
+
 async function retry<T>(operation: () => Thenable<T>, timeoutMs = 5000): Promise<T> {
 	const deadline = performance.now() + timeoutMs;
 	let lastError: unknown;
@@ -70,7 +75,7 @@ suite("Godot 3 debugger protocol v2 DAP", () => {
 		}
 		const ackP95 = percentile95(ackLatencies);
 		const stopP95 = percentile95(stopLatencies);
-		console.log(`Godot 3 v2 DAP: ack_p95=${ackP95.toFixed(2)}ms stop_p95=${stopP95.toFixed(2)}ms`);
+		console.log(`Godot 3 v2 DAP: ack_p50=${percentile50(ackLatencies).toFixed(2)}ms ack_p95=${ackP95.toFixed(2)}ms ack_max=${Math.max(...ackLatencies).toFixed(2)}ms stop_p50=${percentile50(stopLatencies).toFixed(2)}ms stop_p95=${stopP95.toFixed(2)}ms stop_max=${Math.max(...stopLatencies).toFixed(2)}ms`);
 		ok(ackP95 <= 100, `ACK P95 ${ackP95.toFixed(2)}ms exceeds 100ms`);
 		ok(stopP95 <= 300, `next stop P95 ${stopP95.toFixed(2)}ms exceeds 300ms`);
 		await vscode.debug.stopDebugging(session);
