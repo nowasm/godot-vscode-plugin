@@ -49,7 +49,8 @@
 		"test:headless": "WAYLAND_DISPLAY= xvfb-run --auto-servernum --server-args='-screen 0 1024x768x24 -ac +extension GLX' npm test",
 		"test:engine": "ts-node tools/run_tests.ts",
 		"test:debugger-v2": "npm run compile && mocha --ui tdd out/debugger/godot3/protocol_v2.test.js out/debugger/godot3/session_state_v2.test.js",
-		"test:debugger-v2:integration": "npm run compile && ts-node tools/run_debugger_v2_tests.ts"
+		"test:debugger-v2:integration": "npm run compile && ts-node tools/run_debugger_v2_tests.ts",
+		"test:godot4:integration": "npm run compile && ts-node tools/run_godot4_debugger_tests.ts"
 	},
 	"contributes": {
 		"customEditors": [
