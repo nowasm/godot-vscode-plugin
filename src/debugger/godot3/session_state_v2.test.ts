@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { DebugChannelV2, DebugEnvelopeV2 } from "./protocol_v2";
-import { DebugChannelPairerV2, DebugSessionStateV2 } from "./session_state_v2";
+import { DebugChannelPairerV2, DebugSessionStateV2, stopPresentationV2 } from "./session_state_v2";
 
 function hello(channel: DebugChannelV2, generation = 1): DebugEnvelopeV2 {
 	return { sessionId: 42n, generation, channel, sequence: 1n, requestId: 1n, stopId: 0n, type: channel === DebugChannelV2.Control ? "control_hello" : "data_hello", payload: [] };
@@ -36,5 +36,16 @@ suite("Godot 3 debugger session v2", () => {
 		assert.throws(() => state.activate({ sessionId: 42n, generation: 1, control: {}, data: {} }), /generation/);
 		state.activate({ sessionId: 42n, generation: 2, control: {}, data: {} });
 	});
-});
 
+	test("presents ordinary stops without exception text", () => {
+		assert.deepEqual(stopPresentationV2("Breakpoint", false), { reason: "breakpoint" });
+		assert.deepEqual(stopPresentationV2("Invalid get index", true), { reason: "exception", text: "Invalid get index" });
+	});
+
+	test("accepts step out while paused", () => {
+		const state = new DebugSessionStateV2();
+		state.activate({ sessionId: 42n, generation: 1, control: {}, data: {} });
+		state.receive({ ...hello(DebugChannelV2.Control), type: "stopped", requestId: 0n, stopId: 4n });
+		assert.doesNotThrow(() => state.validateExecution("step_out"));
+	});
+});

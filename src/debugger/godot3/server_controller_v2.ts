@@ -60,7 +60,7 @@ export class ServerController {
 	public continue() { return this.execute("continue"); }
 	public next() { return this.execute("next"); }
 	public step() { return this.execute("step"); }
-	public step_out() { return this.execute("next"); }
+	public step_out() { return this.execute("step_out"); }
 
 	public set_breakpoint(path: string, line: number) {
 		void this.requestData("breakpoint", [path, line, true], 0n).catch((error) => log.warn(error.message));

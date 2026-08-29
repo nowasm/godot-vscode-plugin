@@ -36,7 +36,17 @@ export class DebugChannelPairerV2 {
 	}
 }
 
-export type ExecutionCommandV2 = "pause" | "continue" | "step" | "next";
+export type ExecutionCommandV2 = "pause" | "continue" | "step" | "next" | "step_out";
+
+export interface StopPresentationV2 {
+	reason: "breakpoint" | "exception";
+	text?: string;
+}
+
+export function stopPresentationV2(error: string, isError: boolean): StopPresentationV2 {
+	if (!isError) return { reason: "breakpoint" };
+	return error ? { reason: "exception", text: error } : { reason: "exception" };
+}
 
 export class DebugSessionStateV2 {
 	public sessionId = 0n;
@@ -84,4 +94,3 @@ export class DebugSessionStateV2 {
 		if (command !== "pause" && !this.paused) throw new Error(`Cannot ${command}: debugger is not paused`);
 	}
 }
-

@@ -5,6 +5,7 @@ import { Subject } from "await-notify";
 import { GodotDebugData, GodotVariable } from "../debug_runtime";
 import { AttachRequestArguments, LaunchRequestArguments } from "../debugger";
 import { InspectorProvider } from "../inspector_provider";
+import { stopPresentationV2 } from "./session_state_v2";
 import { SceneTreeProvider } from "../scene_tree_provider";
 import { build_sub_values } from "./helpers";
 import { ServerController } from "./server_controller_v2";
@@ -67,7 +68,8 @@ export class GodotDebugSession extends LoggingDebugSession {
 		this.nextReference = 1;
 		this.referenceToHandle.clear();
 		this.handleToReference.clear();
-		this.sendEvent(new StoppedEvent(isError || error ? "exception" : "breakpoint", 0, error || undefined));
+		const presentation = stopPresentationV2(error, isError);
+		this.sendEvent(new StoppedEvent(presentation.reason, 0, presentation.text));
 	}
 
 	protected async continueRequest(response: DebugProtocol.ContinueResponse) {
