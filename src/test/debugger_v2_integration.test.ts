@@ -17,7 +17,7 @@ async function retry<T>(operation: () => Thenable<T>, timeoutMs = 5000): Promise
 }
 
 suite("Godot 3 debugger protocol v2 DAP", () => {
-	test("steps 50 times with acknowledged control and lazy variables", async () => {
+	test("steps 100 times with acknowledged control and lazy variables", async () => {
 		const extension = vscode.extensions.getExtension("godparty.godparty-godot-tools");
 		ok(extension);
 		await extension.activate();
@@ -57,7 +57,7 @@ suite("Godot 3 debugger protocol v2 DAP", () => {
 
 		const ackLatencies: number[] = [];
 		const stopLatencies: number[] = [];
-		for (let index = 0; index < 50; index++) {
+		for (let index = 0; index < 100; index++) {
 			const began = performance.now();
 			await session.customRequest("next", { threadId: 0 });
 			ackLatencies.push(performance.now() - began);

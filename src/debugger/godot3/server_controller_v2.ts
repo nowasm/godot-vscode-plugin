@@ -36,6 +36,7 @@ interface PendingDataV2 {
 	resolve: (message: DebugEnvelopeV2) => void;
 	reject: (error: Error) => void;
 	timer: NodeJS.Timeout;
+	cleanup: () => void;
 }
 
 export class ServerController {
@@ -70,16 +71,16 @@ export class ServerController {
 		void this.requestData("breakpoint", [path, line, false], 0n).catch((error) => log.warn(error.message));
 	}
 
-	public async request_stack_trace(start = 0, count = 100) {
-		return (await this.requestData("stack_trace", [start, count])).payload;
+	public async request_stack_trace(start = 0, count = 100, signal?: AbortSignal) {
+		return (await this.requestData("stack_trace", [start, count], this.state.stopId, 5000, signal)).payload;
 	}
 
-	public async request_scopes(frameId: number) {
-		return (await this.requestData("scopes", [frameId])).payload;
+	public async request_scopes(frameId: number, signal?: AbortSignal) {
+		return (await this.requestData("scopes", [frameId], this.state.stopId, 5000, signal)).payload;
 	}
 
-	public async request_variables(handle: bigint, start = 0, count = 100) {
-		return (await this.requestData("variables", [handle, start, count])).payload;
+	public async request_variables(handle: bigint, start = 0, count = 100, signal?: AbortSignal) {
+		return (await this.requestData("variables", [handle, start, count], this.state.stopId, 5000, signal)).payload;
 	}
 
 	public request_inspect_object(objectId: bigint) {
@@ -190,6 +191,7 @@ export class ServerController {
 			if (pending) {
 				this.pendingData.delete(message.requestId);
 				clearTimeout(pending.timer);
+				pending.cleanup();
 				if (message.type === "request_error") pending.reject(new Error(`${message.payload[0]}: ${message.payload[1]}`));
 				else pending.resolve(message);
 				return;
@@ -220,15 +222,27 @@ export class ServerController {
 		});
 	}
 
-	private requestData(type: string, payload: any[], stopId = this.state.stopId, timeoutMs = 5000): Promise<DebugEnvelopeV2> {
+	private requestData(type: string, payload: any[], stopId = this.state.stopId, timeoutMs = 5000, signal?: AbortSignal): Promise<DebugEnvelopeV2> {
 		if (!this.dataSocket) return Promise.reject(new Error("Debugger v2 data channel is not connected"));
+		if (signal?.aborted) return Promise.reject(new Error(`Godot ${type} request was cancelled`));
 		const message = this.state.nextEnvelope(DebugChannelV2.Data, type, payload, stopId);
 		return new Promise<DebugEnvelopeV2>((resolve, reject) => {
+			const cancel = () => {
+				const pending = this.pendingData.get(message.requestId);
+				if (!pending) return;
+				this.pendingData.delete(message.requestId);
+				clearTimeout(pending.timer);
+				pending.cleanup();
+				reject(new Error(`Godot ${type} request was cancelled`));
+			};
+			const cleanup = () => signal?.removeEventListener("abort", cancel);
 			const timer = setTimeout(() => {
 				this.pendingData.delete(message.requestId);
+				cleanup();
 				reject(new Error(`Timed out waiting for Godot ${type} response`));
 			}, timeoutMs);
-			this.pendingData.set(message.requestId, { resolve, reject, timer });
+			this.pendingData.set(message.requestId, { resolve, reject, timer, cleanup });
+			signal?.addEventListener("abort", cancel, { once: true });
 			this.write(this.dataSocket as net.Socket, message);
 		});
 	}
@@ -261,7 +275,7 @@ export class ServerController {
 
 	private rejectPending(error: Error) {
 		for (const pending of this.pendingControl.values()) { clearTimeout(pending.timer); pending.reject(error); }
-		for (const pending of this.pendingData.values()) { clearTimeout(pending.timer); pending.reject(error); }
+		for (const pending of this.pendingData.values()) { clearTimeout(pending.timer); pending.cleanup(); pending.reject(error); }
 		this.pendingControl.clear();
 		this.pendingData.clear();
 	}
@@ -351,4 +365,3 @@ export class ServerController {
 		this.server = undefined;
 	}
 }
-

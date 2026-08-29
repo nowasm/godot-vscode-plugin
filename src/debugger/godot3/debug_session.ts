@@ -21,6 +21,7 @@ export class GodotDebugSession extends LoggingDebugSession {
 	private nextReference = 1;
 	private referenceToHandle = new Map<number, bigint>();
 	private handleToReference = new Map<bigint, number>();
+	private requestCancellations = new Map<number, AbortController>();
 
 	public constructor() {
 		super();
@@ -38,6 +39,7 @@ export class GodotDebugSession extends LoggingDebugSession {
 		response.body.supportsStepBack = false;
 		response.body.supportsFunctionBreakpoints = false;
 		response.body.supportsConditionalBreakpoints = false;
+		response.body.supportsCancelRequest = true;
 		(response.body as any).supportsVariablePaging = true;
 		this.sendResponse(response);
 		this.sendEvent(new InitializedEvent());
@@ -86,8 +88,9 @@ export class GodotDebugSession extends LoggingDebugSession {
 	}
 
 	protected async stackTraceRequest(response: DebugProtocol.StackTraceResponse, args: DebugProtocol.StackTraceArguments) {
+		const cancellation = this.beginCancellable(response);
 		try {
-			const payload = await this.controller.request_stack_trace(args.startFrame ?? 0, args.levels ?? 100);
+			const payload = await this.controller.request_stack_trace(args.startFrame ?? 0, args.levels ?? 100, cancellation.signal);
 			const frames = Array.isArray(payload[1]) ? payload[1] : [];
 			response.body = {
 				totalFrames: Number(payload[0] ?? 0),
@@ -97,27 +100,40 @@ export class GodotDebugSession extends LoggingDebugSession {
 				})),
 			};
 			this.sendResponse(response);
-		} catch (error) { this.fail(response, error); }
+		} catch (error) { this.fail(response, error); } finally { this.requestCancellations.delete(response.request_seq); }
 	}
 
 	protected async scopesRequest(response: DebugProtocol.ScopesResponse, args: DebugProtocol.ScopesArguments) {
+		const cancellation = this.beginCancellable(response);
 		try {
-			const payload = await this.controller.request_scopes(args.frameId);
+			const payload = await this.controller.request_scopes(args.frameId, cancellation.signal);
 			const scopes = Array.isArray(payload[0]) ? payload[0] : [];
 			response.body = { scopes: scopes.map((scope: any[]) => ({ name: String(scope[0]), variablesReference: this.reference(BigInt(scope[1])), expensive: Boolean(scope[2]) })) };
 			this.sendResponse(response);
-		} catch (error) { this.fail(response, error); }
+		} catch (error) { this.fail(response, error); } finally { this.requestCancellations.delete(response.request_seq); }
 	}
 
 	protected async variablesRequest(response: DebugProtocol.VariablesResponse, args: DebugProtocol.VariablesArguments) {
 		const handle = this.referenceToHandle.get(args.variablesReference);
 		if (handle === undefined) { response.body = { variables: [] }; this.sendResponse(response); return; }
+		const cancellation = this.beginCancellable(response);
 		try {
-			const payload = await this.controller.request_variables(handle, args.start ?? 0, args.count ?? 100);
+			const payload = await this.controller.request_variables(handle, args.start ?? 0, args.count ?? 100, cancellation.signal);
 			const items = Array.isArray(payload[2]) ? payload[2] : [];
 			response.body = { variables: items.map((item: any[]) => this.variable(item)) };
 			this.sendResponse(response);
-		} catch (error) { this.fail(response, error); }
+		} catch (error) { this.fail(response, error); } finally { this.requestCancellations.delete(response.request_seq); }
+	}
+
+	protected cancelRequest(response: DebugProtocol.CancelResponse, args: DebugProtocol.CancelArguments) {
+		if (args.requestId !== undefined) this.requestCancellations.get(args.requestId)?.abort();
+		this.sendResponse(response);
+	}
+
+	private beginCancellable(response: DebugProtocol.Response) {
+		const cancellation = new AbortController();
+		this.requestCancellations.set(response.request_seq, cancellation);
+		return cancellation;
 	}
 
 	private variable(item: any[]): DebugProtocol.Variable {
