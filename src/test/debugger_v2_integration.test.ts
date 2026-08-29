@@ -21,6 +21,17 @@ async function retry<T>(operation: () => Thenable<T>, timeoutMs = 5000): Promise
 	throw lastError ?? new Error("Timed out waiting for debugger state");
 }
 
+async function waitForTopFrame(session: vscode.DebugSession, name: string, line: number, timeoutMs = 2000) {
+	return retry(async () => {
+		const stack = await session.customRequest("stackTrace", { threadId: 0, startFrame: 0, levels: 20 });
+		const top = stack.stackFrames?.[0];
+		if (!top || top.name !== name || top.line !== line) {
+			throw new Error(`Expected ${name}:${line}, got ${top ? `${top.name}:${top.line}` : "no frame"}`);
+		}
+		return stack.stackFrames;
+	}, timeoutMs);
+}
+
 suite("Godot 3 debugger protocol v2 DAP", () => {
 	test("steps 100 times with acknowledged control and lazy variables", async () => {
 		const extension = vscode.extensions.getExtension("godparty.godparty-godot-tools");
@@ -78,6 +89,46 @@ suite("Godot 3 debugger protocol v2 DAP", () => {
 		console.log(`Godot 3 v2 DAP: ack_p50=${percentile50(ackLatencies).toFixed(2)}ms ack_p95=${ackP95.toFixed(2)}ms ack_max=${Math.max(...ackLatencies).toFixed(2)}ms stop_p50=${percentile50(stopLatencies).toFixed(2)}ms stop_p95=${stopP95.toFixed(2)}ms stop_max=${Math.max(...stopLatencies).toFixed(2)}ms`);
 		ok(ackP95 <= 100, `ACK P95 ${ackP95.toFixed(2)}ms exceeds 100ms`);
 		ok(stopP95 <= 300, `next stop P95 ${stopP95.toFixed(2)}ms exceeds 300ms`);
+		await vscode.debug.stopDebugging(session);
+		await retry(async () => {
+			if (vscode.debug.activeDebugSession === session) throw new Error("Debug session is still active");
+			return true;
+		});
+	});
+
+	test("steps into each same-line call in evaluation order", async () => {
+		const folder = vscode.workspace.workspaceFolders?.[0];
+		ok(folder);
+		const godotPath = process.env.GODOT3_V2_PATH;
+		ok(godotPath, "GODOT3_V2_PATH is required");
+		const started = await vscode.debug.startDebugging(folder, {
+			name: "Godot 3 call stepping integration",
+			type: "godot",
+			request: "launch",
+			project: folder.uri.fsPath,
+			editor_path: godotPath,
+			address: "127.0.0.1",
+			port: 6137,
+			additional_options: "--no-window --audio-driver Dummy --script call_stepping.gd",
+		});
+		ok(started);
+		const session = await retry(async () => {
+			const active = vscode.debug.activeDebugSession;
+			if (!active) throw new Error("Debug session is not active");
+			await waitForTopFrame(active, "_exercise", 22, 250);
+			return active;
+		}, 15_000);
+
+		for (const [name, line] of [["first", 6], ["second", 10], ["combine", 14]] as const) {
+			await session.customRequest("stepIn", { threadId: 0 });
+			const calleeFrames = await waitForTopFrame(session, name, line);
+			ok(calleeFrames[1]?.name === "_exercise" && calleeFrames[1]?.line === 22, `${name} lost its caller frame`);
+			await session.customRequest("stepOut", { threadId: 0 });
+			await waitForTopFrame(session, "_exercise", 22);
+		}
+
+		await session.customRequest("next", { threadId: 0 });
+		await waitForTopFrame(session, "_exercise", 23);
 		await vscode.debug.stopDebugging(session);
 	});
 });
