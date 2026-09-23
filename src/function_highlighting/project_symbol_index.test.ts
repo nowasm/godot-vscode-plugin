@@ -58,6 +58,17 @@ func move_player(target: Vector2, enemy: Enemy) -> void:
 		strictEqual(index.resolveClassMethod("AddonTool", "execute")?.uri, "res://addons/example/tool.gd");
 	});
 
+	test("indexes the native base in an inline class_name declaration", () => {
+		const index = new ProjectSymbolIndex();
+		const script = index.update(
+			"res://safe_area.gd",
+			"class_name SafeArea extends Control\nfunc _ready(): get_viewport_rect()\n",
+		);
+
+		strictEqual(script.className, "SafeArea");
+		strictEqual(script.extendsName, "Control");
+	});
+
 	test("replaces and removes one file atomically", () => {
 		const index = new ProjectSymbolIndex();
 		index.update("res://changing.gd", "class_name Changing\nfunc before(): pass\n");

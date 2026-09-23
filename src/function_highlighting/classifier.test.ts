@@ -17,6 +17,8 @@ const api = GodotApiIndex.fromObject({
 			methods: [{ name: "_ready", is_virtual: true }, { name: "add_child" }],
 		},
 		{ name: "CharacterBody2D", inherits: "Node", methods: [] },
+		{ name: "CanvasItem", inherits: "Node", methods: [{ name: "get_viewport_rect" }] },
+		{ name: "Control", inherits: "CanvasItem", methods: [] },
 	],
 });
 
@@ -87,6 +89,17 @@ func run():
 			classifyFunction(token(source, "add_child"), { uri, api, project: index }).reason,
 			"project_receiver",
 		);
+	});
+
+	test("classifies unqualified inherited calls from inline class_name declarations", () => {
+		const index = new ProjectSymbolIndex();
+		const uri = "res://safe_area.gd";
+		const source = "class_name SafeArea extends Control\nfunc _ready():\n\tget_viewport_rect()\n\t_refit()\nfunc _refit(): pass\n";
+		index.update(uri, source);
+
+		strictEqual(classifyFunction(token(source, "_ready"), { uri, api, project: index }).reason, "native_virtual_override");
+		strictEqual(classifyFunction(token(source, "get_viewport_rect"), { uri, api, project: index }).origin, "system");
+		strictEqual(classifyFunction(token(source, "_refit", 0), { uri, api, project: index }).origin, "project");
 	});
 
 	test("autoloads and unresolved dynamic receivers remain project-owned", () => {

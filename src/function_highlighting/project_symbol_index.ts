@@ -48,7 +48,9 @@ function declarationAtOrBefore(
 function parseScript(uri: string, source: string): ProjectScriptSymbol {
 	const masked = maskNonCode(source);
 	const className = firstMatch(masked, /^\s*class_name\s+([A-Za-z_]\w*)/m);
-	const extendsName = firstMatch(masked, /^\s*extends\s+([A-Za-z_]\w*)/m);
+	const extendsName =
+		firstMatch(masked, /^\s*extends\s+([A-Za-z_]\w*)/m) ??
+		firstMatch(masked, /^\s*class_name\s+[A-Za-z_]\w*\s+extends\s+([A-Za-z_]\w*)/m);
 	const functionTokens = scanFunctions(source).filter((token) => token.kind === "declaration");
 	const declarations = functionTokens.map((token) => ({
 		name: token.name,
