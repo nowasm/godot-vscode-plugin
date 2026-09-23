@@ -24,6 +24,7 @@ import { createLogger, get_project_version, register_command, set_context } from
 import { GodotVariable } from "./debug_runtime";
 import { GodotDebugSession as Godot3DebugSession } from "./godot3/debug_session";
 import { GodotDebugSession as Godot4DebugSession } from "./godot4/debug_session";
+import { GodotDebugSessionV2 as Godot4DebugSessionV2 } from "./godot4/debug_session_v2";
 import { GodotObject } from "./godot4/variables/godot_object_promise";
 import { InspectorProvider, RemoteProperty } from "./inspector_provider";
 import { SceneNode, SceneTreeProvider } from "./scene_tree_provider";
@@ -31,6 +32,7 @@ import { SceneNode, SceneTreeProvider } from "./scene_tree_provider";
 const log = createLogger("debugger", { output: "Godot Debugger" });
 
 export interface LaunchRequestArguments extends DebugProtocol.LaunchRequestArguments {
+	debug_protocol_v2?: boolean;
 	address: string;
 	port: number;
 	project: string;
@@ -51,6 +53,7 @@ export interface LaunchRequestArguments extends DebugProtocol.LaunchRequestArgum
 }
 
 export interface AttachRequestArguments extends DebugProtocol.AttachRequestArguments {
+	debug_protocol_v2?: boolean;
 	address: string;
 	port: number;
 	project: string;
@@ -79,7 +82,7 @@ class GDFileDecorationProvider implements FileDecorationProvider {
 }
 
 export class GodotDebugger implements DebugAdapterDescriptorFactory, DebugConfigurationProvider {
-	public session?: Godot3DebugSession | Godot4DebugSession;
+	public session?: Godot3DebugSession | Godot4DebugSession | Godot4DebugSessionV2;
 	public sceneTree = new SceneTreeProvider();
 	public inspector = new InspectorProvider();
 
@@ -114,7 +117,9 @@ export class GodotDebugger implements DebugAdapterDescriptorFactory, DebugConfig
 		log.info(`Project version identified as ${projectVersion}`);
 
 		if (projectVersion?.startsWith("4")) {
-			this.session = new Godot4DebugSession(projectVersion);
+			this.session = session.configuration.debug_protocol_v2 === true
+				? new Godot4DebugSessionV2()
+				: new Godot4DebugSession(projectVersion);
 		} else {
 			this.session = new Godot3DebugSession();
 		}

@@ -223,6 +223,23 @@ _Usage_
 
 ![Showing the debugger in action](img/godot-debug.png)
 
+### Godot 4.6.2 dual-channel debugger (opt-in)
+
+Protocol v2 requires the matching custom Godot 4.6.2 build and this version of the VS Code extension. The official Godot executable continues to use the legacy protocol. Set `debug_protocol_v2` only for the matching build:
+
+```json
+{
+	"name": "Godot 4.6.2 Debug v2",
+	"type": "godot",
+	"request": "launch",
+	"project": "${workspaceFolder}",
+	"editor_path": "D:\\devlib\\godot\\godot-4.6.2-debug-v2\\bin\\godot.windows.editor.x86_64.exe",
+	"debug_protocol_v2": true
+}
+```
+
+Build the engine from `D:\devlib\godot\godot-4.6.2-debug-v2` with `scons platform=windows target=editor d3d12=no -j16`. In VS Code, F5 launches it with a `debugv2://` endpoint. For attach mode, start the custom engine with `--remote-debug debugv2://127.0.0.1:<port>` and use the same port in the attach configuration. The built-in Godot editor debugger remains on its stock protocol; this opt-in mode is for the VS Code extension.
+
 ## Issues and contributions
 
 The [Godot Tools](https://github.com/godotengine/godot-vscode-plugin) extension
