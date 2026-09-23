@@ -18,8 +18,13 @@ const API_FIXTURE = {
 		{
 			name: "Node",
 			inherits: "Object",
-			methods: [{ name: "_ready", is_virtual: true }, { name: "add_child" }],
+			methods: [
+				{ name: "_ready", is_virtual: true },
+				{ name: "add_child" },
+				{ name: "get_viewport", return_value: { type: "Viewport" } },
+			],
 		},
+		{ name: "Viewport", inherits: "Node", methods: [], signals: [{ name: "size_changed" }] },
 	],
 };
 
@@ -39,6 +44,9 @@ suite("GodotApiIndex", () => {
 		strictEqual(index.getNativeMethodOwner("Node", "connect"), "Object");
 		strictEqual(index.hasVirtualMethod("Node", "_ready"), true);
 		strictEqual(index.hasNativeMethod("Node", "missing"), false);
+		strictEqual(index.getNativeMethodReturnType("Node", "get_viewport"), "Viewport");
+		strictEqual(index.hasNativeSignal("Viewport", "size_changed"), true);
+		strictEqual(index.hasNativeSignal("Node", "size_changed"), false);
 	});
 
 	test("stops safely when malformed inheritance contains a cycle", () => {
@@ -67,5 +75,7 @@ suite("GodotApiIndex", () => {
 		strictEqual(index.hasBuiltinMethod("Array", "append"), true);
 		strictEqual(index.hasNativeMethod("Node", "add_child"), true);
 		strictEqual(index.hasVirtualMethod("Node", "_ready"), true);
+		strictEqual(index.getNativeMethodReturnType("Control", "get_viewport"), "Viewport");
+		strictEqual(index.hasNativeSignal("Viewport", "size_changed"), true);
 	});
 });

@@ -1,6 +1,7 @@
 import type { GodotApiIndex } from "./godot_api_index";
 import type { LspCancellationToken, LspOriginRequest, LspOriginResolver } from "./lsp_origin_resolver";
 import type { ProjectScriptSymbol, ProjectSymbolIndex } from "./project_symbol_index";
+import { maskNonCode } from "./scanner";
 import type { FunctionToken } from "./types";
 
 export type FunctionOrigin = "system" | "project";
@@ -91,6 +92,141 @@ function classifyTypedReceiver(
 	return undefined;
 }
 
+function splitReceiver(receiver: string): string[] {
+	const masked = maskNonCode(receiver);
+	const segments: string[] = [];
+	let depth = 0;
+	let start = 0;
+	for (let index = 0; index < masked.length; index++) {
+		if (masked[index] === "(") {
+			depth++;
+		} else if (masked[index] === ")") {
+			depth--;
+		} else if (masked[index] === "." && depth === 0) {
+			segments.push(receiver.slice(start, index).trim());
+			start = index + 1;
+		}
+	}
+	segments.push(receiver.slice(start).trim());
+	return segments;
+}
+
+function calledMethod(segment: string): string | undefined {
+	return segment.endsWith(")") ? /^([A-Za-z_]\w*)\s*\(/.exec(segment)?.[1] : undefined;
+}
+
+function methodReturnType(
+	typeName: string | undefined,
+	scriptUri: string | undefined,
+	methodName: string,
+	context: FunctionClassificationContext,
+): string | undefined {
+	const projectMethod = scriptUri
+		? context.project.resolveMethodFromScript(scriptUri, methodName)
+		: typeName
+			? context.project.resolveClassMethod(typeName, methodName)
+			: undefined;
+	if (projectMethod) {
+		return projectMethod.returnType;
+	}
+	const nativeType = nativeBaseForType(typeName, context);
+	return nativeType ? context.api.getNativeMethodReturnType(nativeType, methodName) : undefined;
+}
+
+function initializerReturnType(
+	initializer: string,
+	token: FunctionToken,
+	context: FunctionClassificationContext,
+	nativeBase: string | undefined,
+): string | undefined {
+	const dot = initializer.lastIndexOf(".");
+	if (dot < 0) {
+		return context.api.hasBuiltinClass(initializer)
+			? initializer
+			: methodReturnType(nativeBase, context.uri, initializer, context);
+	}
+	const owner = initializer.slice(0, dot);
+	const method = initializer.slice(dot + 1);
+	const autoloadUri = context.project.resolveAutoload(owner);
+	if (autoloadUri) {
+		const script = context.project.getScript(autoloadUri);
+		return methodReturnType(script?.className ?? script?.extendsName, autoloadUri, method, context);
+	}
+	const ownerType =
+		context.project.resolveVariableType(context.uri, owner, token.enclosingFunction) ??
+		(context.api.hasNativeClass(owner) ? owner : undefined);
+	return methodReturnType(ownerType, undefined, method, context);
+}
+
+function resolveReceiverType(
+	token: FunctionToken,
+	context: FunctionClassificationContext,
+	nativeBase: string | undefined,
+): string | undefined {
+	if (!token.receiver) {
+		return undefined;
+	}
+	const [root, ...members] = splitReceiver(token.receiver);
+	let scriptUri: string | undefined;
+	let typeName: string | undefined;
+	const rootCall = calledMethod(root);
+	if (rootCall) {
+		typeName = methodReturnType(nativeBase, context.uri, rootCall, context);
+	} else if (root === "self" || root === "super") {
+		typeName = nativeBase;
+		scriptUri = context.uri;
+	} else {
+		scriptUri = context.project.resolveAutoload(root);
+		if (scriptUri) {
+			const script = context.project.getScript(scriptUri);
+			typeName = script?.className ?? script?.extendsName;
+		} else {
+			typeName = context.project.resolveVariableType(context.uri, root, token.enclosingFunction);
+			if (!typeName) {
+				const initializer = context.project.resolveVariableInitializerCall(context.uri, root, token.enclosingFunction);
+				if (initializer) {
+					typeName = initializerReturnType(initializer, token, context, nativeBase);
+				}
+			}
+			if (!typeName) {
+				if (context.project.hasScriptSignal(context.uri, root) || (nativeBase && context.api.hasNativeSignal(nativeBase, root))) {
+					typeName = "Signal";
+				} else if (context.api.hasNativeClass(root) || context.api.hasBuiltinClass(root)) {
+					typeName = root;
+				}
+			}
+		}
+	}
+
+	for (const member of members) {
+		const method = calledMethod(member);
+		if (method) {
+			typeName = methodReturnType(typeName, scriptUri, method, context);
+			scriptUri = undefined;
+		} else {
+			const projectScript = scriptUri ?? (typeName ? context.project.getClassScript(typeName)?.uri : undefined);
+			const nativeType = nativeBaseForType(typeName, context);
+			const propertyType = projectScript ? context.project.resolveVariableType(projectScript, member) : undefined;
+			if (propertyType) {
+				typeName = propertyType;
+				scriptUri = undefined;
+			} else if (
+				(projectScript && context.project.hasScriptSignal(projectScript, member)) ||
+				(nativeType && context.api.hasNativeSignal(nativeType, member))
+			) {
+				typeName = "Signal";
+				scriptUri = undefined;
+			} else {
+				return undefined;
+			}
+		}
+		if (!typeName) {
+			return undefined;
+		}
+	}
+	return typeName;
+}
+
 export function classifyFunction(token: FunctionToken, context: FunctionClassificationContext): FunctionClassification {
 	const script = context.project.getScript(context.uri);
 	const nativeBase = nativeBaseForScript(script, context);
@@ -158,6 +294,16 @@ export function classifyFunction(token: FunctionToken, context: FunctionClassifi
 	const aliasUri = context.project.resolveScriptAlias(context.uri, token.receiver);
 	if (aliasUri) {
 		return project(aliasUri, "script_alias_receiver");
+	}
+
+	const chainedType = resolveReceiverType(token, context, nativeBase);
+	if (chainedType) {
+		const chained = classifyTypedReceiver(chainedType, token.name, context);
+		if (chained) {
+			return chainedType === "Signal" && chained.origin === "system"
+				? system("Signal", "native_signal_method", "inferred")
+				: chained;
+		}
 	}
 
 	const receiverType = context.project.resolveVariableType(context.uri, token.receiver, token.enclosingFunction);

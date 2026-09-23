@@ -1,5 +1,14 @@
 # Changelog
 
+### 0.1.3 — GodParty fork
+
+- Recognize built-in String methods on values inferred from typed project functions, Autoload members, and string literals.
+
+### 0.1.2 — GodParty fork
+
+- Recognize inherited Godot methods, signal methods, and chained calls such as `get_tree().create_timer()` in function-origin highlighting.
+- Index the active GDScript document while the full workspace scan is still running.
+
 ### 0.1.0 — GodParty fork
 
 - Distinguish Godot/system and project/custom GDScript function declarations and calls.

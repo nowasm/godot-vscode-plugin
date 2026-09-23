@@ -105,25 +105,60 @@ export function maskNonCode(source: string): string {
 	return result.join("");
 }
 
-function findReceiver(source: string, masked: string, nameStart: number): string | undefined {
-	let cursor = nameStart - 1;
+function skipWhitespaceLeft(masked: string, position: number): number {
+	let cursor = position;
 	while (cursor >= 0 && /\s/.test(masked[cursor])) {
 		cursor--;
 	}
-	if (cursor < 0 || masked[cursor] !== ".") {
+	return cursor;
+}
+
+function receiverSegmentStart(masked: string, position: number): number | undefined {
+	let cursor = skipWhitespaceLeft(masked, position);
+	if (masked[cursor] === ")") {
+		let depth = 1;
+		cursor--;
+		while (cursor >= 0 && depth > 0) {
+			if (masked[cursor] === ")") {
+				depth++;
+			} else if (masked[cursor] === "(") {
+				depth--;
+			}
+			cursor--;
+		}
+		if (depth !== 0) {
+			return undefined;
+		}
+		cursor = skipWhitespaceLeft(masked, cursor);
+	}
+	const end = cursor;
+	while (cursor >= 0 && /[\w$%/]/.test(masked[cursor])) {
+		cursor--;
+	}
+	return cursor < end ? cursor + 1 : undefined;
+}
+
+function findReceiver(source: string, masked: string, nameStart: number): string | undefined {
+	const dot = skipWhitespaceLeft(masked, nameStart - 1);
+	if (masked[dot] !== ".") {
 		return undefined;
 	}
-
-	cursor--;
-	while (cursor >= 0 && /\s/.test(masked[cursor])) {
-		cursor--;
+	let start = receiverSegmentStart(masked, dot - 1);
+	if (start === undefined) {
+		return undefined;
 	}
-	const end = cursor + 1;
-	while (cursor >= 0 && /[\w$%./]/.test(masked[cursor])) {
-		cursor--;
+	while (true) {
+		const previousDot = skipWhitespaceLeft(masked, start - 1);
+		if (masked[previousDot] !== ".") {
+			break;
+		}
+		const previousStart = receiverSegmentStart(masked, previousDot - 1);
+		if (previousStart === undefined) {
+			break;
+		}
+		start = previousStart;
 	}
-	const receiver = source.slice(cursor + 1, end).trim();
-	return receiver || undefined;
+	return source.slice(start, dot).trim();
 }
 
 function isAnnotation(masked: string, nameStart: number): boolean {

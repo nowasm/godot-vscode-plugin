@@ -40,6 +40,9 @@ export class FunctionHighlightingService {
 	}
 
 	analyze(document: HighlightDocument, cancellation?: LspCancellationToken): Promise<readonly AnalyzedFunction[]> {
+		if (!this.project.getScript(document.uri)) {
+			this.project.update(document.uri, document.text);
+		}
 		const key = `${document.uri}:${document.version}`;
 		const existing = this.cache.get(key);
 		if (existing) {

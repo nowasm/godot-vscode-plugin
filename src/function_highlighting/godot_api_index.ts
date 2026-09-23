@@ -8,12 +8,14 @@ export interface GodotApiHeader {
 export interface GodotApiMethod {
 	name?: string;
 	is_virtual?: boolean;
+	return_value?: { type?: string };
 }
 
 export interface GodotApiClass {
 	name?: string;
 	inherits?: string;
 	methods?: GodotApiMethod[];
+	signals?: Array<{ name?: string }>;
 }
 
 export interface GodotApiDump {
@@ -59,6 +61,8 @@ export class GodotApiIndex {
 	private readonly utilityFunctions: Set<string>;
 	private readonly builtinMethods = new Map<string, Set<string>>();
 	private readonly nativeMethods = new Map<string, Set<string>>();
+	private readonly nativeMethodReturnTypes = new Map<string, Map<string, string>>();
+	private readonly nativeSignals = new Map<string, Set<string>>();
 	private readonly virtualMethods = new Map<string, Set<string>>();
 	private readonly nativeParents = new Map<string, string>();
 
@@ -87,6 +91,17 @@ export class GodotApiIndex {
 				continue;
 			}
 			this.nativeMethods.set(nativeClass.name, methodNames(nativeClass.methods));
+			this.nativeMethodReturnTypes.set(
+				nativeClass.name,
+				new Map(
+					(nativeClass.methods ?? [])
+						.filter((method): method is GodotApiMethod & { name: string; return_value: { type: string } } =>
+							typeof method.name === "string" && typeof method.return_value?.type === "string",
+						)
+						.map((method) => [method.name, method.return_value.type]),
+				),
+			);
+			this.nativeSignals.set(nativeClass.name, methodNames(nativeClass.signals));
 			this.virtualMethods.set(
 				nativeClass.name,
 				methodNames(nativeClass.methods?.filter((method) => method.is_virtual)),
@@ -130,6 +145,15 @@ export class GodotApiIndex {
 
 	getNativeMethodOwner(typeName: string, methodName: string): string | undefined {
 		return this.findOwner(this.nativeMethods, typeName, methodName);
+	}
+
+	getNativeMethodReturnType(typeName: string, methodName: string): string | undefined {
+		const owner = this.getNativeMethodOwner(typeName, methodName);
+		return owner ? this.nativeMethodReturnTypes.get(owner)?.get(methodName) : undefined;
+	}
+
+	hasNativeSignal(typeName: string, signalName: string): boolean {
+		return this.findOwner(this.nativeSignals, typeName, signalName) !== undefined;
 	}
 
 	hasVirtualMethod(typeName: string, methodName: string): boolean {

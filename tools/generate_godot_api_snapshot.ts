@@ -3,8 +3,8 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 
-type ApiMethod = { name?: string; is_virtual?: boolean };
-type ApiClass = { name?: string; inherits?: string; methods?: ApiMethod[] };
+type ApiMethod = { name?: string; is_virtual?: boolean; return_value?: { type?: string } };
+type ApiClass = { name?: string; inherits?: string; methods?: ApiMethod[]; signals?: Array<{ name?: string }> };
 type ApiDump = {
 	header?: Record<string, unknown>;
 	utility_functions?: ApiMethod[];
@@ -23,6 +23,7 @@ function slimMethods(methods: ApiMethod[] | undefined) {
 		.map((method) => ({
 			name: method.name,
 			...(method.is_virtual ? { is_virtual: true } : {}),
+			...(method.return_value?.type ? { return_value: { type: method.return_value.type } } : {}),
 		}));
 }
 
@@ -33,6 +34,9 @@ function slimClasses(classes: ApiClass[] | undefined) {
 			name: entry.name,
 			...(entry.inherits ? { inherits: entry.inherits } : {}),
 			methods: slimMethods(entry.methods),
+			...(entry.signals?.length
+				? { signals: entry.signals.filter((signal) => signal.name).map((signal) => ({ name: signal.name })) }
+				: {}),
 		}));
 }
 

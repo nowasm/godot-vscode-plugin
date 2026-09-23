@@ -6,6 +6,7 @@ export interface ProjectFunctionSymbol {
 	readonly ownerClass?: string;
 	readonly isStatic: boolean;
 	readonly start: number;
+	readonly returnType?: string;
 }
 
 export interface ProjectScriptSymbol {
@@ -13,8 +14,11 @@ export interface ProjectScriptSymbol {
 	readonly className?: string;
 	readonly extendsName?: string;
 	readonly functions: ReadonlyMap<string, ProjectFunctionSymbol>;
+	readonly signals: ReadonlySet<string>;
 	readonly memberTypes: ReadonlyMap<string, string>;
 	readonly scopedTypes: ReadonlyMap<string, ReadonlyMap<string, string>>;
+	readonly memberInitializerCalls: ReadonlyMap<string, string>;
+	readonly scopedInitializerCalls: ReadonlyMap<string, ReadonlyMap<string, string>>;
 	readonly scriptAliases: ReadonlyMap<string, string>;
 }
 
@@ -64,6 +68,7 @@ function parseScript(uri: string, source: string): ProjectScriptSymbol {
 			ownerClass: className,
 			isStatic: token.isStatic,
 			start: token.start,
+			returnType: firstMatch(masked.slice(token.end), /^\s*\([^)]*\)\s*->\s*([A-Za-z_]\w*)/),
 		});
 	}
 
@@ -91,6 +96,45 @@ function parseScript(uri: string, source: string): ProjectScriptSymbol {
 			memberTypes.set(match[1], match[2]);
 		}
 	}
+	const signals = new Set<string>();
+	for (const match of masked.matchAll(/\bsignal\s+([A-Za-z_]\w*)\b/g)) {
+		signals.add(match[1]);
+	}
+
+	const memberInitializerCalls = new Map<string, string>();
+	const scopedInitializerCalls = new Map<string, Map<string, string>>();
+	const initializerPattern = /\b(?:var|const)\s+([A-Za-z_]\w*)\s*:=\s*([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)\s*\(/g;
+	for (const match of masked.matchAll(initializerPattern)) {
+		if (match.index === undefined) {
+			continue;
+		}
+		const enclosingFunction = declarationAtOrBefore(declarations, match.index);
+		if (enclosingFunction) {
+			const calls = scopedInitializerCalls.get(enclosingFunction) ?? new Map<string, string>();
+			calls.set(match[1], match[2]);
+			scopedInitializerCalls.set(enclosingFunction, calls);
+		} else {
+			memberInitializerCalls.set(match[1], match[2]);
+		}
+	}
+	const stringInitializerPattern = /\b(?:var|const)\s+([A-Za-z_]\w*)\s*:=\s*["']/g;
+	for (const match of source.matchAll(stringInitializerPattern)) {
+		if (match.index === undefined) {
+			continue;
+		}
+		const quoteIndex = match.index + match[0].length - 1;
+		if (masked.slice(match.index, quoteIndex) !== source.slice(match.index, quoteIndex)) {
+			continue;
+		}
+		const enclosingFunction = declarationAtOrBefore(declarations, match.index);
+		if (enclosingFunction) {
+			const types = scopedTypes.get(enclosingFunction) ?? new Map<string, string>();
+			types.set(match[1], "String");
+			scopedTypes.set(enclosingFunction, types);
+		} else {
+			memberTypes.set(match[1], "String");
+		}
+	}
 
 	const scriptAliases = new Map<string, string>();
 	const aliasPattern =
@@ -107,8 +151,11 @@ function parseScript(uri: string, source: string): ProjectScriptSymbol {
 		className,
 		extendsName,
 		functions,
+		signals,
 		memberTypes,
 		scopedTypes,
+		memberInitializerCalls,
+		scopedInitializerCalls,
 		scriptAliases,
 	};
 }
@@ -203,6 +250,30 @@ export class ProjectSymbolIndex {
 		return (
 			(enclosingFunction ? script.scopedTypes.get(enclosingFunction)?.get(variableName) : undefined) ??
 			script.memberTypes.get(variableName)
+		);
+	}
+
+	hasScriptSignal(uri: string, signalName: string): boolean {
+		let script = this.scripts.get(uri);
+		const visited = new Set<string>();
+		while (script && !visited.has(script.uri)) {
+			visited.add(script.uri);
+			if (script.signals.has(signalName)) {
+				return true;
+			}
+			script = script.extendsName ? this.classes.get(script.extendsName) : undefined;
+		}
+		return false;
+	}
+
+	resolveVariableInitializerCall(uri: string, variableName: string, enclosingFunction?: string): string | undefined {
+		const script = this.scripts.get(uri);
+		if (!script) {
+			return undefined;
+		}
+		return (
+			(enclosingFunction ? script.scopedInitializerCalls.get(enclosingFunction)?.get(variableName) : undefined) ??
+			script.memberInitializerCalls.get(variableName)
 		);
 	}
 

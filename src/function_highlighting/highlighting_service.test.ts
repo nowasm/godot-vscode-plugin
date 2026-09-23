@@ -43,4 +43,20 @@ suite("Function highlighting service", () => {
 		const after = await service.analyze(document);
 		strictEqual(before === after, false);
 	});
+
+	test("indexes the active document before the workspace scan reaches it", async () => {
+		const api = GodotApiIndex.fromObject({
+			classes: [
+				{ name: "Node", methods: [{ name: "get_tree", return_value: { type: "SceneTree" } }] },
+				{ name: "SceneTree", methods: [{ name: "create_timer" }] },
+			],
+		});
+		const project = new ProjectSymbolIndex();
+		const service = new FunctionHighlightingService(api, project);
+		const document = { uri: "res://timers.gd", version: 1, text: "extends Node\nfunc run(): get_tree().create_timer(1.0)\n" };
+
+		const entries = await service.analyze(document);
+		strictEqual(project.getScript(document.uri)?.extendsName, "Node");
+		strictEqual(entries.find((entry) => entry.token.name === "create_timer")?.classification.origin, "system");
+	});
 });

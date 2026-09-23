@@ -69,6 +69,37 @@ func move_player(target: Vector2, enemy: Enemy) -> void:
 		strictEqual(script.extendsName, "Control");
 	});
 
+	test("indexes simple inferred local initializers within their function", () => {
+		const index = new ProjectSymbolIndex();
+		const uri = "res://safe_area.gd";
+		index.update(uri, "extends Control\nfunc _ready():\n\tvar vp := get_viewport()\nfunc other(): pass\n");
+
+		strictEqual(index.resolveVariableInitializerCall(uri, "vp", "_ready"), "get_viewport");
+		strictEqual(index.resolveVariableInitializerCall(uri, "vp", "other"), undefined);
+	});
+
+	test("indexes script-declared signals", () => {
+		const index = new ProjectSymbolIndex();
+		const uri = "res://signals.gd";
+		index.update(uri, "class_name Signals extends Node\nsignal custom_changed(value)\n");
+
+		strictEqual(index.hasScriptSignal(uri, "custom_changed"), true);
+		strictEqual(index.hasScriptSignal(uri, "missing"), false);
+	});
+
+	test("indexes function return types, qualified initializers, and String literals", () => {
+		const index = new ProjectSymbolIndex();
+		const uri = "res://boot.gd";
+		index.update(
+			uri,
+			"extends Node\nfunc get_value() -> String: return \"\"\nfunc run():\n\tvar from_call := PlayerData.device_id()\n\tvar literal := \"\"\n",
+		);
+
+		strictEqual(index.resolveScriptMethod(uri, "get_value")?.returnType, "String");
+		strictEqual(index.resolveVariableInitializerCall(uri, "from_call", "run"), "PlayerData.device_id");
+		strictEqual(index.resolveVariableType(uri, "literal", "run"), "String");
+	});
+
 	test("replaces and removes one file atomically", () => {
 		const index = new ProjectSymbolIndex();
 		index.update("res://changing.gd", "class_name Changing\nfunc before(): pass\n");

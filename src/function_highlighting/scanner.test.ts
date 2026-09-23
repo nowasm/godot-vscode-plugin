@@ -85,4 +85,12 @@ func run() -> void:
 			],
 		);
 	});
+
+	test("retains call and signal chains as receivers", () => {
+		const source = "get_tree().create_timer(0.5).timeout.connect(_done)\nget_viewport().size_changed.is_connected(_done)\n";
+		const tokens = scanFunctions(source);
+		strictEqual(tokens.find((entry) => entry.name === "create_timer")?.receiver, "get_tree()");
+		strictEqual(tokens.find((entry) => entry.name === "connect")?.receiver, "get_tree().create_timer(0.5).timeout");
+		strictEqual(tokens.find((entry) => entry.name === "is_connected")?.receiver, "get_viewport().size_changed");
+	});
 });
