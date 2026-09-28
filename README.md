@@ -21,9 +21,14 @@ to be part of Godot, it is deliberately classified as project code.
 1. Disable the official `geequlim.godot-tools` extension. Both extensions own
    the same GDScript language integration and must not run together.
 2. In VS Code, run **Extensions: Install from VSIX...** and select
-   `godparty-godot-tools-0.1.0.vsix`.
+   `godparty-godot-tools-0.1.4.vsix`.
 3. Open a folder containing `project.godot`. For an exact engine API index,
    configure the existing `godotTools.editorPath.godot4` setting.
+
+For editor-backed GDScript diagnostics, the extension detects the project's
+Godot major version from `project.godot` and connects to port 6008 for Godot 3
+or port 6005 for Godot 4. Set `godotTools.lsp.serverPort` only if your editor
+uses a custom port; an explicit setting overrides automatic selection.
 
 The command palette contains **GodParty Godot Tools: Toggle Function Origin
 Highlighting** and **GodParty Godot Tools: Rebuild Function Origin Index**.

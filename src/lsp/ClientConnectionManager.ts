@@ -14,6 +14,7 @@ import {
 import { prompt_for_godot_executable, prompt_for_reload, select_godot_executable } from "../utils/prompts";
 import { killSubProcesses, subProcess } from "../utils/subspawn";
 import GDScriptLanguageClient, { ClientStatus, TargetLSP } from "./GDScriptLanguageClient";
+import { resolveEditorLspPort } from "./editor_port";
 import { EventEmitter } from "vscode";
 
 const log = createLogger("lsp.manager", { output: "Godot LSP" });
@@ -42,6 +43,7 @@ export class ClientConnectionManager {
 	private statusWidget: vscode.StatusBarItem;
 
 	private connectedVersion = "";
+	private editorPort = 6008;
 
 	constructor(private context: vscode.ExtensionContext) {
 		this.create_new_client();
@@ -80,6 +82,7 @@ export class ClientConnectionManager {
 		this.client?.stop(); // fire and forget
 		this.client = new GDScriptLanguageClient();
 		this.client.port = port;
+		this.client.editorPort = this.editorPort;
 		this.client.events.on("status", this.on_client_status_changed.bind(this));
 	}
 
@@ -87,6 +90,16 @@ export class ClientConnectionManager {
 		this.client.port = -1;
 		this.target = TargetLSP.EDITOR;
 		this.connectedVersion = "";
+		const folder = vscode.workspace.workspaceFolders?.[0];
+		const configuration = vscode.workspace.getConfiguration("godotTools", folder?.uri);
+		const portSetting = configuration.inspect<number>("lsp.serverPort");
+		const configuredPort = configuration.get<number>("lsp.serverPort", 6008);
+		const hasExplicitPort =
+			portSetting?.globalValue !== undefined ||
+			portSetting?.workspaceValue !== undefined ||
+			portSetting?.workspaceFolderValue !== undefined;
+		this.editorPort = resolveEditorLspPort(await get_project_version(), configuredPort, hasExplicitPort);
+		this.client.editorPort = this.editorPort;
 
 		if (get_configuration("lsp.headless")) {
 			this.target = TargetLSP.HEADLESS;
@@ -185,10 +198,7 @@ export class ClientConnectionManager {
 
 	private get_lsp_connection_string() {
 		const host = get_configuration("lsp.serverHost");
-		let port = get_configuration("lsp.serverPort");
-		if (this.client.port !== -1) {
-			port = this.client.port;
-		}
+		const port = this.target === TargetLSP.HEADLESS ? this.client.port : this.editorPort;
 		return `${host}:${port}`;
 	}
 

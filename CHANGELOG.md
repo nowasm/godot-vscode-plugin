@@ -1,5 +1,9 @@
 # Changelog
 
+### 0.1.4 — GodParty fork
+
+- Detect Godot 3 and Godot 4 projects from `project.godot` and connect to the matching editor language-server port by default. Explicit LSP port settings still take precedence.
+
 ### 0.1.3 — GodParty fork
 
 - Recognize built-in String methods on values inferred from typed project functions, Autoload members, and string literals.

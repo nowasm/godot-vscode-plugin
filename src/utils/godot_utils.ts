@@ -3,6 +3,7 @@ import * as path from "node:path";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import { execSync } from "node:child_process";
+import { parseGodotProjectVersion } from "./project_version";
 
 export function get_editor_data_dir(): string {
 	// from: https://stackoverflow.com/a/26227660
@@ -84,20 +85,8 @@ export async function get_project_version(): Promise<string | undefined> {
 		return undefined;
 	}
 
-	let godotVersion = "3.x";
 	const document = await vscode.workspace.openTextDocument(projectFile);
-	const text = document.getText();
-
-	const match = text.match(/config\/features=PackedStringArray\((.*)\)/);
-	if (match) {
-		const line = match[0];
-		const version = line.match(/\"(4.[0-9]+)\"/);
-		if (version) {
-			godotVersion = version[1];
-		}
-	}
-
-	projectVersion = godotVersion;
+	projectVersion = parseGodotProjectVersion(document.getText());
 	return projectVersion;
 }
 

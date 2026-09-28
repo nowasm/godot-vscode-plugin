@@ -91,6 +91,7 @@ export default class GDScriptLanguageClient extends LanguageClient {
 	public target: TargetLSP = TargetLSP.EDITOR;
 
 	public port = -1;
+	public editorPort = 6008;
 	public lastPortTried = -1;
 	public sentMessages = new Map();
 	private rejected = false;
@@ -132,16 +133,7 @@ export default class GDScriptLanguageClient extends LanguageClient {
 		this.target = target;
 		this.status = ClientStatus.PENDING;
 
-		let port = get_configuration("lsp.serverPort");
-		if (this.port !== -1) {
-			port = this.port;
-		}
-
-		if (this.target === TargetLSP.EDITOR) {
-			if (port === 6005 || port === 6008) {
-				port = 6005;
-			}
-		}
+		const port = this.target === TargetLSP.EDITOR ? this.editorPort : this.port;
 
 		this.lastPortTried = port;
 
@@ -358,21 +350,6 @@ export default class GDScriptLanguageClient extends LanguageClient {
 		if (this.rejected) {
 			this.status = ClientStatus.REJECTED;
 			return;
-		}
-		if (this.target === TargetLSP.EDITOR) {
-			const host = get_configuration("lsp.serverHost");
-			let port = get_configuration("lsp.serverPort");
-
-			if (port === 6005 || port === 6008) {
-				if (this.lastPortTried === 6005) {
-					port = 6008;
-					log.info(`attempting to connect to LSP at ${host}:${port}`);
-
-					this.lastPortTried = port;
-					this.io.connect(host, port);
-					return;
-				}
-			}
 		}
 		this.status = ClientStatus.DISCONNECTED;
 	}

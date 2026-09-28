@@ -2,7 +2,7 @@
 	"name": "godparty-godot-tools",
 	"displayName": "GodParty Godot Tools",
 	"icon": "icon.png",
-	"version": "0.1.3",
+	"version": "0.1.4",
 	"description": "Tools for game development with Godot Engine and GDScript",
 	"repository": {
 		"type": "git",
@@ -376,7 +376,7 @@
 					"default": 6008,
 					"minimum": 0,
 					"maximum": 65535,
-					"description": "The server port of the GDScript language server"
+					"description": "Editor LSP port override. By default, Godot 3 projects use 6008 and Godot 4 projects use 6005. An explicitly configured port takes precedence."
 				},
 				"godotTools.lsp.headless": {
 					"type": "boolean",
