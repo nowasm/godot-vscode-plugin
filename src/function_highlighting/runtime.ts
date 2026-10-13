@@ -77,14 +77,14 @@ export class FunctionHighlightingRuntime implements vscode.Disposable {
 			log.warn(`Could not build project function index: ${String(error)}`);
 		}
 
-		const bundledSnapshotPath = vscode.Uri.joinPath(
-			this.context.extensionUri,
-			"resources",
-			"godot_api",
-			"godot-4.6.json",
-		).fsPath;
 		try {
 			const projectVersion = await get_project_version();
+			const bundledSnapshotPath = vscode.Uri.joinPath(
+				this.context.extensionUri,
+				"resources",
+				"godot_api",
+				projectVersion?.[0] === "3" ? "godot-3.6.json" : "godot-4.6.json",
+			).fsPath;
 			const settingName = `editorPath.godot${projectVersion?.[0] ?? "4"}`;
 			const configuredPath = get_configuration(settingName);
 			const verification =
@@ -94,7 +94,12 @@ export class FunctionHighlightingRuntime implements vscode.Disposable {
 			const result = await loadGodotApi({
 				cacheDir: path.join(this.context.globalStorageUri.fsPath, "godot-api"),
 				bundledSnapshotPath,
-				godotPath: verification?.status === "SUCCESS" ? verification.godotPath : undefined,
+				godotPath:
+					projectVersion?.[0] === "3"
+						? undefined
+						: verification?.status === "SUCCESS"
+							? verification.godotPath
+							: undefined,
 				godotVersion: verification?.status === "SUCCESS" ? verification.version : projectVersion,
 			});
 			this.service.setApi(result.index);

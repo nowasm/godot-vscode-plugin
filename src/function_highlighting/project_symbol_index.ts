@@ -17,6 +17,8 @@ export interface ProjectScriptSymbol {
 	readonly signals: ReadonlySet<string>;
 	readonly memberTypes: ReadonlyMap<string, string>;
 	readonly scopedTypes: ReadonlyMap<string, ReadonlyMap<string, string>>;
+	readonly memberNames: ReadonlySet<string>;
+	readonly scopedNames: ReadonlyMap<string, ReadonlySet<string>>;
 	readonly memberInitializerCalls: ReadonlyMap<string, string>;
 	readonly scopedInitializerCalls: ReadonlyMap<string, ReadonlyMap<string, string>>;
 	readonly scriptAliases: ReadonlyMap<string, string>;
@@ -73,15 +75,42 @@ function parseScript(uri: string, source: string): ProjectScriptSymbol {
 	}
 
 	const scopedTypes = new Map<string, Map<string, string>>();
+	const scopedNames = new Map<string, Set<string>>();
 	const functionPattern = /\bfunc\s+([A-Za-z_]\w*)\s*\(([^)]*)\)/g;
 	for (const match of masked.matchAll(functionPattern)) {
 		const types = parseTypedNames(match[2]);
+		const names = new Set<string>();
+		for (const parameter of match[2].split(",")) {
+			const name = /^\s*([A-Za-z_]\w*)/.exec(parameter)?.[1];
+			if (name) names.add(name);
+		}
+		scopedNames.set(match[1], names);
 		if (types.size > 0) {
 			scopedTypes.set(match[1], types);
 		}
 	}
 
 	const memberTypes = new Map<string, string>();
+	const memberNames = new Set<string>();
+	for (const match of masked.matchAll(/\b(?:var|const)\s+([A-Za-z_]\w*)\b/g)) {
+		if (match.index === undefined) continue;
+		const enclosingFunction = declarationAtOrBefore(declarations, match.index);
+		if (enclosingFunction) {
+			const names = scopedNames.get(enclosingFunction) ?? new Set<string>();
+			names.add(match[1]);
+			scopedNames.set(enclosingFunction, names);
+		} else {
+			memberNames.add(match[1]);
+		}
+	}
+	for (const match of masked.matchAll(/\bfor\s+([A-Za-z_]\w*)\s+in\b/g)) {
+		if (match.index === undefined) continue;
+		const enclosingFunction = declarationAtOrBefore(declarations, match.index);
+		if (!enclosingFunction) continue;
+		const names = scopedNames.get(enclosingFunction) ?? new Set<string>();
+		names.add(match[1]);
+		scopedNames.set(enclosingFunction, names);
+	}
 	const variablePattern = /\b(?:var|const)\s+([A-Za-z_]\w*)\s*:\s*([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?)/g;
 	for (const match of masked.matchAll(variablePattern)) {
 		if (match.index === undefined) {
@@ -154,6 +183,8 @@ function parseScript(uri: string, source: string): ProjectScriptSymbol {
 		signals,
 		memberTypes,
 		scopedTypes,
+		memberNames,
+		scopedNames,
 		memberInitializerCalls,
 		scopedInitializerCalls,
 		scriptAliases,
@@ -251,6 +282,26 @@ export class ProjectSymbolIndex {
 			(enclosingFunction ? script.scopedTypes.get(enclosingFunction)?.get(variableName) : undefined) ??
 			script.memberTypes.get(variableName)
 		);
+	}
+
+	hasDeclaredVariable(uri: string, name: string, enclosingFunction?: string): boolean {
+		const script = this.scripts.get(uri);
+		return (
+			!!script &&
+			((enclosingFunction ? script.scopedNames.get(enclosingFunction)?.has(name) : false) ||
+				this.hasDeclaredMember(uri, name))
+		);
+	}
+
+	hasDeclaredMember(uri: string, name: string): boolean {
+		let script = this.scripts.get(uri);
+		const visited = new Set<string>();
+		while (script && !visited.has(script.uri)) {
+			visited.add(script.uri);
+			if (script.memberNames.has(name)) return true;
+			script = script.extendsName ? this.classes.get(script.extendsName) : undefined;
+		}
+		return false;
 	}
 
 	hasScriptSignal(uri: string, signalName: string): boolean {

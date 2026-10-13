@@ -9,3 +9,11 @@ export interface FunctionToken {
 	readonly isStatic: boolean;
 	readonly enclosingFunction?: string;
 }
+
+export interface PropertyToken {
+	readonly name: string;
+	readonly receiver?: string;
+	readonly start: number;
+	readonly end: number;
+	readonly enclosingFunction?: string;
+}

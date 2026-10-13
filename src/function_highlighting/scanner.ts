@@ -1,4 +1,4 @@
-import type { FunctionToken } from "./types";
+import type { FunctionToken, PropertyToken } from "./types";
 
 const NON_CALL_KEYWORDS = new Set([
 	"and",
@@ -229,4 +229,32 @@ export function scanFunctions(source: string): FunctionToken[] {
 		}
 		return { ...token, enclosingFunction };
 	});
+}
+
+/** Candidate property references; ownership is checked against the active Godot API. */
+export function scanProperties(source: string): PropertyToken[] {
+	const masked = maskNonCode(source);
+	const declarations = findDeclarations(masked);
+	const functions = scanFunctions(source);
+	const functionStarts = new Set(functions.map((token) => token.start));
+	const result: PropertyToken[] = [];
+	let declarationIndex = 0;
+	let enclosingFunction: string | undefined;
+	for (const match of masked.matchAll(/\b[A-Za-z_]\w*\b/g)) {
+		const start = match.index;
+		if (start === undefined || functionStarts.has(start)) {
+			continue;
+		}
+		while (declarationIndex < declarations.length && declarations[declarationIndex].start <= start) {
+			enclosingFunction = declarations[declarationIndex++].name;
+		}
+		const end = start + match[0].length;
+		let next = end;
+		while (next < masked.length && /\s/.test(masked[next])) next++;
+		if (masked[next] === "(" || isAnnotation(masked, start)) {
+			continue;
+		}
+		result.push({ name: match[0], receiver: findReceiver(source, masked, start), start, end, enclosingFunction });
+	}
+	return result;
 }

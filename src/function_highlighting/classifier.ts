@@ -2,7 +2,7 @@ import type { GodotApiIndex } from "./godot_api_index";
 import type { LspCancellationToken, LspOriginRequest, LspOriginResolver } from "./lsp_origin_resolver";
 import type { ProjectScriptSymbol, ProjectSymbolIndex } from "./project_symbol_index";
 import { maskNonCode } from "./scanner";
-import type { FunctionToken } from "./types";
+import type { FunctionToken, PropertyToken } from "./types";
 
 export type FunctionOrigin = "system" | "project";
 export type ClassificationConfidence = "certain" | "inferred" | "fallback";
@@ -135,7 +135,7 @@ function methodReturnType(
 
 function initializerReturnType(
 	initializer: string,
-	token: FunctionToken,
+	token: Pick<FunctionToken, "enclosingFunction">,
 	context: FunctionClassificationContext,
 	nativeBase: string | undefined,
 ): string | undefined {
@@ -159,7 +159,7 @@ function initializerReturnType(
 }
 
 function resolveReceiverType(
-	token: FunctionToken,
+	token: Pick<FunctionToken, "receiver" | "enclosingFunction">,
 	context: FunctionClassificationContext,
 	nativeBase: string | undefined,
 ): string | undefined {
@@ -183,13 +183,20 @@ function resolveReceiverType(
 		} else {
 			typeName = context.project.resolveVariableType(context.uri, root, token.enclosingFunction);
 			if (!typeName) {
-				const initializer = context.project.resolveVariableInitializerCall(context.uri, root, token.enclosingFunction);
+				const initializer = context.project.resolveVariableInitializerCall(
+					context.uri,
+					root,
+					token.enclosingFunction,
+				);
 				if (initializer) {
 					typeName = initializerReturnType(initializer, token, context, nativeBase);
 				}
 			}
 			if (!typeName) {
-				if (context.project.hasScriptSignal(context.uri, root) || (nativeBase && context.api.hasNativeSignal(nativeBase, root))) {
+				if (
+					context.project.hasScriptSignal(context.uri, root) ||
+					(nativeBase && context.api.hasNativeSignal(nativeBase, root))
+				) {
 					typeName = "Signal";
 				} else if (context.api.hasNativeClass(root) || context.api.hasBuiltinClass(root)) {
 					typeName = root;
@@ -210,6 +217,12 @@ function resolveReceiverType(
 			if (propertyType) {
 				typeName = propertyType;
 				scriptUri = undefined;
+			} else if (nativeType && context.api.getNativePropertyType(nativeType, member)) {
+				typeName = context.api.getNativePropertyType(nativeType, member);
+				scriptUri = undefined;
+			} else if (typeName && context.api.getBuiltinPropertyType(typeName, member)) {
+				typeName = context.api.getBuiltinPropertyType(typeName, member);
+				scriptUri = undefined;
 			} else if (
 				(projectScript && context.project.hasScriptSignal(projectScript, member)) ||
 				(nativeType && context.api.hasNativeSignal(nativeType, member))
@@ -225,6 +238,30 @@ function resolveReceiverType(
 		}
 	}
 	return typeName;
+}
+
+/** Unknown or project-owned names are deliberately left to the editor theme. */
+export function classifyProperty(token: PropertyToken, context: FunctionClassificationContext): string | undefined {
+	const script = context.project.getScript(context.uri);
+	const nativeBase = nativeBaseForScript(script, context);
+	if (!token.receiver) {
+		return nativeBase && !context.project.hasDeclaredVariable(context.uri, token.name, token.enclosingFunction)
+			? context.api.getNativePropertyOwner(nativeBase, token.name)
+			: undefined;
+	}
+	if (token.receiver === "self" || token.receiver === "super") {
+		if (context.project.hasDeclaredMember(context.uri, token.name)) return undefined;
+	}
+	const receiverType = resolveReceiverType(token, context, nativeBase);
+	if (!receiverType) return undefined;
+	const projectScript = context.project.getClassScript(receiverType);
+	if (projectScript && context.project.hasDeclaredMember(projectScript.uri, token.name)) return undefined;
+	const nativeType = nativeBaseForType(receiverType, context);
+	return nativeType
+		? context.api.getNativePropertyOwner(nativeType, token.name)
+		: context.api.hasBuiltinProperty(receiverType, token.name)
+			? receiverType
+			: undefined;
 }
 
 export function classifyFunction(token: FunctionToken, context: FunctionClassificationContext): FunctionClassification {

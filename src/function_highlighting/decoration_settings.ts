@@ -3,6 +3,7 @@ export type FunctionFontStyle = "normal" | "bold" | "italic" | "bold italic";
 export interface FunctionDecorationSettings {
 	enabled: boolean;
 	systemColor: string;
+	propertyColor: string;
 	projectColor: string;
 	systemFontStyle: FunctionFontStyle;
 	projectFontStyle: FunctionFontStyle;
@@ -26,6 +27,7 @@ export function normalizeDecorationSettings(
 	return {
 		enabled: typeof value.enabled === "boolean" ? value.enabled : true,
 		systemColor: color(value.systemColor, "#4FC3F7"),
+		propertyColor: color(value.propertyColor, "#C792EA"),
 		projectColor: color(value.projectColor, "#FFD166"),
 		systemFontStyle: fontStyle(value.systemFontStyle),
 		projectFontStyle: fontStyle(value.projectFontStyle),

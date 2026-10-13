@@ -9,6 +9,7 @@ function readSettings(): FunctionDecorationSettings {
 	return normalizeDecorationSettings({
 		enabled: configuration.get("enabled"),
 		systemColor: configuration.get("systemColor"),
+		propertyColor: configuration.get("propertyColor"),
 		projectColor: configuration.get("projectColor"),
 		systemFontStyle: configuration.get("systemFontStyle"),
 		projectFontStyle: configuration.get("projectFontStyle"),
@@ -29,6 +30,7 @@ function styleOptions(
 
 export class FunctionOriginDecorations implements vscode.Disposable {
 	private systemDecoration!: vscode.TextEditorDecorationType;
+	private propertyDecoration!: vscode.TextEditorDecorationType;
 	private projectDecoration!: vscode.TextEditorDecorationType;
 	private settings = readSettings();
 	private readonly timers = new Map<string, NodeJS.Timeout>();
@@ -72,6 +74,7 @@ export class FunctionOriginDecorations implements vscode.Disposable {
 		}
 		this.timers.clear();
 		this.systemDecoration.dispose();
+		this.propertyDecoration.dispose();
 		this.projectDecoration.dispose();
 		for (const subscription of this.subscriptions) {
 			subscription.dispose();
@@ -80,9 +83,13 @@ export class FunctionOriginDecorations implements vscode.Disposable {
 
 	private createDecorationTypes(): void {
 		this.systemDecoration?.dispose();
+		this.propertyDecoration?.dispose();
 		this.projectDecoration?.dispose();
 		this.systemDecoration = vscode.window.createTextEditorDecorationType(
 			styleOptions(this.settings.systemColor, this.settings.systemFontStyle),
+		);
+		this.propertyDecoration = vscode.window.createTextEditorDecorationType(
+			styleOptions(this.settings.propertyColor, "normal"),
 		);
 		this.projectDecoration = vscode.window.createTextEditorDecorationType(
 			styleOptions(this.settings.projectColor, this.settings.projectFontStyle),
@@ -113,11 +120,17 @@ export class FunctionOriginDecorations implements vscode.Disposable {
 		}
 		if (!this.settings.enabled) {
 			editor.setDecorations(this.systemDecoration, []);
+			editor.setDecorations(this.propertyDecoration, []);
 			editor.setDecorations(this.projectDecoration, []);
 			return;
 		}
 		const version = editor.document.version;
 		const entries = await this.service.analyze({
+			uri: editor.document.uri.toString(),
+			version,
+			text: editor.document.getText(),
+		});
+		const properties = this.service.analyzeProperties({
 			uri: editor.document.uri.toString(),
 			version,
 			text: editor.document.getText(),
@@ -135,6 +148,16 @@ export class FunctionOriginDecorations implements vscode.Disposable {
 			(entry.classification.origin === "system" ? systemRanges : projectRanges).push(range);
 		}
 		editor.setDecorations(this.systemDecoration, systemRanges);
+		editor.setDecorations(
+			this.propertyDecoration,
+			properties.map(
+				(entry) =>
+					new vscode.Range(
+						editor.document.positionAt(entry.token.start),
+						editor.document.positionAt(entry.token.end),
+					),
+			),
+		);
 		editor.setDecorations(this.projectDecoration, projectRanges);
 	}
 }

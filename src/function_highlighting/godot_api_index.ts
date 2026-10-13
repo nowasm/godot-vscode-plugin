@@ -16,6 +16,8 @@ export interface GodotApiClass {
 	inherits?: string;
 	methods?: GodotApiMethod[];
 	signals?: Array<{ name?: string }>;
+	properties?: Array<{ name?: string; type?: string }>;
+	members?: Array<{ name?: string; type?: string }>;
 }
 
 export interface GodotApiDump {
@@ -60,7 +62,11 @@ export class GodotApiIndex {
 
 	private readonly utilityFunctions: Set<string>;
 	private readonly builtinMethods = new Map<string, Set<string>>();
+	private readonly builtinProperties = new Map<string, Set<string>>();
+	private readonly builtinPropertyTypes = new Map<string, Map<string, string>>();
 	private readonly nativeMethods = new Map<string, Set<string>>();
+	private readonly nativeProperties = new Map<string, Set<string>>();
+	private readonly nativePropertyTypes = new Map<string, Map<string, string>>();
 	private readonly nativeMethodReturnTypes = new Map<string, Map<string, string>>();
 	private readonly nativeSignals = new Map<string, Set<string>>();
 	private readonly virtualMethods = new Map<string, Set<string>>();
@@ -83,6 +89,8 @@ export class GodotApiIndex {
 		for (const builtin of api.builtin_classes ?? []) {
 			if (builtin.name) {
 				this.builtinMethods.set(builtin.name, methodNames(builtin.methods));
+				this.builtinProperties.set(builtin.name, methodNames(builtin.members ?? builtin.properties));
+				this.builtinPropertyTypes.set(builtin.name, this.propertyTypes(builtin.members ?? builtin.properties));
 			}
 		}
 
@@ -91,12 +99,18 @@ export class GodotApiIndex {
 				continue;
 			}
 			this.nativeMethods.set(nativeClass.name, methodNames(nativeClass.methods));
+			this.nativeProperties.set(nativeClass.name, methodNames(nativeClass.properties ?? nativeClass.members));
+			this.nativePropertyTypes.set(
+				nativeClass.name,
+				this.propertyTypes(nativeClass.properties ?? nativeClass.members),
+			);
 			this.nativeMethodReturnTypes.set(
 				nativeClass.name,
 				new Map(
 					(nativeClass.methods ?? [])
-						.filter((method): method is GodotApiMethod & { name: string; return_value: { type: string } } =>
-							typeof method.name === "string" && typeof method.return_value?.type === "string",
+						.filter(
+							(method): method is GodotApiMethod & { name: string; return_value: { type: string } } =>
+								typeof method.name === "string" && typeof method.return_value?.type === "string",
 						)
 						.map((method) => [method.name, method.return_value.type]),
 				),
@@ -131,6 +145,14 @@ export class GodotApiIndex {
 		return this.builtinMethods.get(typeName)?.has(methodName) ?? false;
 	}
 
+	hasBuiltinProperty(typeName: string, propertyName: string): boolean {
+		return this.builtinProperties.get(typeName)?.has(propertyName) ?? false;
+	}
+
+	getBuiltinPropertyType(typeName: string, propertyName: string): string | undefined {
+		return this.builtinPropertyTypes.get(typeName)?.get(propertyName);
+	}
+
 	hasBuiltinClass(typeName: string): boolean {
 		return this.builtinMethods.has(typeName);
 	}
@@ -141,6 +163,15 @@ export class GodotApiIndex {
 
 	hasNativeMethod(typeName: string, methodName: string): boolean {
 		return this.getNativeMethodOwner(typeName, methodName) !== undefined;
+	}
+
+	getNativePropertyOwner(typeName: string, propertyName: string): string | undefined {
+		return this.findOwner(this.nativeProperties, typeName, propertyName);
+	}
+
+	getNativePropertyType(typeName: string, propertyName: string): string | undefined {
+		const owner = this.getNativePropertyOwner(typeName, propertyName);
+		return owner ? this.nativePropertyTypes.get(owner)?.get(propertyName) : undefined;
 	}
 
 	getNativeMethodOwner(typeName: string, methodName: string): string | undefined {
@@ -162,6 +193,17 @@ export class GodotApiIndex {
 
 	getNativeParent(typeName: string): string | undefined {
 		return this.nativeParents.get(typeName);
+	}
+
+	private propertyTypes(properties: Array<{ name?: string; type?: string }> | undefined): Map<string, string> {
+		return new Map(
+			(properties ?? [])
+				.filter(
+					(property): property is { name: string; type: string } =>
+						typeof property.name === "string" && typeof property.type === "string",
+				)
+				.map((property) => [property.name, property.type]),
+		);
 	}
 
 	private findOwner(index: Map<string, Set<string>>, typeName: string, methodName: string): string | undefined {

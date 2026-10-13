@@ -20,6 +20,7 @@ suite("GodParty function highlighting in VS Code", () => {
 		const config = vscode.workspace.getConfiguration("godpartyGodotTools.functionHighlight");
 		strictEqual(config.get("enabled"), true);
 		strictEqual(config.get("systemColor"), "#4FC3F7");
+		strictEqual(config.get("propertyColor"), "#C792EA");
 		strictEqual(config.get("projectColor"), "#FFD166");
 	});
 
@@ -50,6 +51,31 @@ suite("GodParty function highlighting in VS Code", () => {
 			.join("\n");
 		ok(hoverText.includes("GodParty function origin"));
 		ok(hoverText.includes("Godot system"));
+	});
+
+	test("provides a distinct semantic token for engine properties", async () => {
+		await globals.functionHighlightingRuntime?.initialize();
+		const folder = vscode.workspace.workspaceFolders?.[0];
+		ok(folder);
+		const document = await vscode.workspace.openTextDocument(
+			vscode.Uri.file(path.join(folder.uri.fsPath, "engine_property.gd")),
+		);
+		const tokens = await vscode.commands.executeCommand<vscode.SemanticTokens>(
+			"vscode.provideDocumentSemanticTokens",
+			document.uri,
+		);
+		const propertyLine = document.positionAt(document.getText().indexOf("size = other.size")).line;
+		let line = 0;
+		let character = 0;
+		let propertyTokens = 0;
+		for (let index = 0; index < tokens.data.length; index += 5) {
+			line += tokens.data[index];
+			character = tokens.data[index] ? tokens.data[index + 1] : character + tokens.data[index + 1];
+			if (line === propertyLine && tokens.data[index + 2] === 4 && tokens.data[index + 3] === 4) {
+				propertyTokens++;
+			}
+		}
+		strictEqual(propertyTokens, 2);
 	});
 
 	test("toggles highlighting at workspace scope", async () => {

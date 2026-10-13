@@ -4,7 +4,15 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 type ApiMethod = { name?: string; is_virtual?: boolean; return_value?: { type?: string } };
-type ApiClass = { name?: string; inherits?: string; methods?: ApiMethod[]; signals?: Array<{ name?: string }> };
+type ApiMember = { name?: string; type?: string };
+type ApiClass = {
+	name?: string;
+	inherits?: string;
+	methods?: ApiMethod[];
+	signals?: Array<{ name?: string }>;
+	properties?: ApiMember[];
+	members?: ApiMember[];
+};
 type ApiDump = {
 	header?: Record<string, unknown>;
 	utility_functions?: ApiMethod[];
@@ -34,6 +42,16 @@ function slimClasses(classes: ApiClass[] | undefined) {
 			name: entry.name,
 			...(entry.inherits ? { inherits: entry.inherits } : {}),
 			methods: slimMethods(entry.methods),
+			...(entry.properties?.length
+				? {
+						properties: entry.properties
+							.filter((property) => property.name)
+							.map(({ name, type }) => ({ name, type })),
+					}
+				: {}),
+			...(entry.members?.length
+				? { members: entry.members.filter((member) => member.name).map(({ name, type }) => ({ name, type })) }
+				: {}),
 			...(entry.signals?.length
 				? { signals: entry.signals.filter((signal) => signal.name).map((signal) => ({ name: signal.name })) }
 				: {}),

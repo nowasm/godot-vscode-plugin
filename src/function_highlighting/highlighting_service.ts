@@ -1,11 +1,12 @@
-import { classifyFunction, classifyFunctionWithLsp, type FunctionClassification } from "./classifier";
+import { classifyFunction, classifyFunctionWithLsp, classifyProperty, type FunctionClassification } from "./classifier";
 import type { GodotApiIndex } from "./godot_api_index";
 import type { LspCancellationToken, LspOriginResolver } from "./lsp_origin_resolver";
 import type { ProjectSymbolIndex } from "./project_symbol_index";
-import { scanFunctions } from "./scanner";
-import type { FunctionToken } from "./types";
+import { scanFunctions, scanProperties } from "./scanner";
+import type { FunctionToken, PropertyToken } from "./types";
 
 export type FunctionSemanticTokenType = "godotSystemFunction" | "godotProjectFunction";
+export const PROPERTY_SEMANTIC_TOKEN_TYPE = "godotSystemProperty";
 
 export interface HighlightDocument {
 	uri: string;
@@ -19,6 +20,11 @@ export interface AnalyzedFunction {
 	tokenType: FunctionSemanticTokenType;
 }
 
+export interface AnalyzedProperty {
+	token: PropertyToken;
+	owner: string;
+}
+
 function positionAt(text: string, offset: number): { line: number; character: number } {
 	const before = text.slice(0, offset);
 	const lines = before.split(/\r?\n/);
@@ -27,6 +33,7 @@ function positionAt(text: string, offset: number): { line: number; character: nu
 
 export class FunctionHighlightingService {
 	private readonly cache = new Map<string, Promise<readonly AnalyzedFunction[]>>();
+	private readonly propertyCache = new Map<string, readonly AnalyzedProperty[]>();
 
 	constructor(
 		private api: GodotApiIndex,
@@ -53,6 +60,20 @@ export class FunctionHighlightingService {
 		return pending;
 	}
 
+	analyzeProperties(document: HighlightDocument): readonly AnalyzedProperty[] {
+		if (!this.project.getScript(document.uri)) this.project.update(document.uri, document.text);
+		const key = `${document.uri}:${document.version}`;
+		const existing = this.propertyCache.get(key);
+		if (existing) return existing;
+		const context = { uri: document.uri, api: this.api, project: this.project };
+		const properties = scanProperties(document.text).flatMap((token) => {
+			const owner = classifyProperty(token, context);
+			return owner ? [{ token, owner }] : [];
+		});
+		this.propertyCache.set(key, properties);
+		return properties;
+	}
+
 	async classificationAt(
 		document: HighlightDocument,
 		offset: number,
@@ -66,6 +87,7 @@ export class FunctionHighlightingService {
 	invalidate(uri?: string): void {
 		if (!uri) {
 			this.cache.clear();
+			this.propertyCache.clear();
 			this.resolver?.clear();
 			return;
 		}
@@ -73,6 +95,9 @@ export class FunctionHighlightingService {
 			if (key.startsWith(`${uri}:`)) {
 				this.cache.delete(key);
 			}
+		}
+		for (const key of this.propertyCache.keys()) {
+			if (key.startsWith(`${uri}:`)) this.propertyCache.delete(key);
 		}
 		this.resolver?.clear(uri);
 	}

@@ -25,15 +25,17 @@ suite("Function highlighting manifest", () => {
 		const properties = manifest.contributes.configuration.properties;
 		strictEqual(properties["godpartyGodotTools.functionHighlight.enabled"]?.default, true);
 		strictEqual(properties["godpartyGodotTools.functionHighlight.systemColor"]?.default, "#4FC3F7");
+		strictEqual(properties["godpartyGodotTools.functionHighlight.propertyColor"]?.default, "#C792EA");
 		strictEqual(properties["godpartyGodotTools.functionHighlight.projectColor"]?.default, "#FFD166");
 		strictEqual(properties["godpartyGodotTools.functionHighlight.systemFontStyle"]?.default, "normal");
 		strictEqual(properties["godpartyGodotTools.functionHighlight.projectFontStyle"]?.default, "normal");
 		strictEqual(Array.isArray(properties["godpartyGodotTools.functionHighlight.exclude"]?.default), true);
 	});
 
-	test("maps both semantic token types to TextMate scopes", () => {
+	test("maps function and property semantic token types to TextMate scopes", () => {
 		const scopes = Object.assign({}, ...manifest.contributes.semanticTokenScopes.map((entry) => entry.scopes));
 		strictEqual(scopes.godotSystemFunction?.[0], "support.function.godot-system");
+		strictEqual(scopes.godotSystemProperty?.[0], "variable.other.property.godot-system");
 		strictEqual(scopes.godotProjectFunction?.[0], "entity.name.function.godot-project");
 	});
 });

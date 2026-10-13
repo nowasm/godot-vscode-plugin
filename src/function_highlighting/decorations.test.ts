@@ -7,6 +7,7 @@ suite("Function highlighting decorations", () => {
 		deepStrictEqual(normalizeDecorationSettings({}), {
 			enabled: true,
 			systemColor: "#4FC3F7",
+			propertyColor: "#C792EA",
 			projectColor: "#FFD166",
 			systemFontStyle: "normal",
 			projectFontStyle: "normal",
@@ -14,6 +15,7 @@ suite("Function highlighting decorations", () => {
 		deepStrictEqual(
 			normalizeDecorationSettings({
 				systemColor: "not-a-color",
+				propertyColor: "#AA55CC",
 				projectColor: "#123456",
 				systemFontStyle: "italic",
 				projectFontStyle: "bold",
@@ -21,6 +23,7 @@ suite("Function highlighting decorations", () => {
 			{
 				enabled: true,
 				systemColor: "#4FC3F7",
+				propertyColor: "#AA55CC",
 				projectColor: "#123456",
 				systemFontStyle: "italic",
 				projectFontStyle: "bold",

@@ -35,9 +35,13 @@ Highlighting** and **GodParty Godot Tools: Rebuild Function Origin Index**.
 Settings are available under `godpartyGodotTools.functionHighlight.*`:
 
 - `enabled`
-- `systemColor` and `projectColor`
+- `systemColor`, `projectColor`, and `propertyColor` (engine properties, purple by default)
 - `systemFontStyle` and `projectFontStyle`
 - `exclude` project-index glob patterns
+
+Engine properties use the API snapshot matching the project's Godot major
+version. The Godot 3 snapshot can be regenerated from a Godot 3 source tree
+with `npm run generate-godot3-api-snapshot -- --godot-source <path>`.
 
 See [UPSTREAM.md](UPSTREAM.md) for the fork baseline and attribution.
 

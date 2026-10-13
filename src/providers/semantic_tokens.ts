@@ -15,7 +15,7 @@ import {
 } from "vscode";
 import { createLogger } from "../utils";
 import { HIGHLIGHT_CONFIG_PREFIX } from "../utils/extension_identity";
-import type { FunctionHighlightingService } from "../function_highlighting";
+import { PROPERTY_SEMANTIC_TOKEN_TYPE, type FunctionHighlightingService } from "../function_highlighting";
 
 const log = createLogger("providers.tokens");
 
@@ -24,7 +24,7 @@ export class GDSemanticTokensProvider implements DocumentSemanticTokensProvider 
 	readonly onDidChangeSemanticTokens: Event<void> = this.changeEmitter.event;
 
 	private legend = new SemanticTokensLegend(
-		["nodePath", "%", "godotSystemFunction", "godotProjectFunction"],
+		["nodePath", "%", "godotSystemFunction", "godotProjectFunction", PROPERTY_SEMANTIC_TOKEN_TYPE],
 		["test"],
 	);
 
@@ -84,6 +84,17 @@ export class GDSemanticTokensProvider implements DocumentSemanticTokensProvider 
 					builder.push(
 						new Range(document.positionAt(entry.token.start), document.positionAt(entry.token.end)),
 						entry.tokenType,
+						[],
+					);
+				}
+				for (const entry of this.functionService.analyzeProperties({
+					uri: document.uri.toString(),
+					version: document.version,
+					text,
+				})) {
+					builder.push(
+						new Range(document.positionAt(entry.token.start), document.positionAt(entry.token.end)),
+						PROPERTY_SEMANTIC_TOKEN_TYPE,
 						[],
 					);
 				}

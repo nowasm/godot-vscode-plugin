@@ -42,6 +42,7 @@
 		"esbuild-watch": "npm run esbuild-base -- --sourcemap --watch",
 		"generate-icons": "ts-node tools/generate_icons.ts",
 		"generate-api-snapshot": "ts-node tools/generate_godot_api_snapshot.ts",
+		"generate-godot3-api-snapshot": "ts-node tools/generate_godot3_api_snapshot.ts",
 		"test": "vscode-test",
 		"test:function-highlighting:vscode": "ts-node tools/run_local_vscode_tests.ts",
 		"test:function-highlighting:godparty": "ts-node tools/run_local_vscode_tests.ts --godparty",
@@ -280,12 +281,17 @@
 				"godpartyGodotTools.functionHighlight.enabled": {
 					"type": "boolean",
 					"default": true,
-					"description": "Distinguish Godot/system functions from project-defined functions in GDScript."
+					"description": "Distinguish Godot/system functions and properties from project-defined symbols in GDScript."
 				},
 				"godpartyGodotTools.functionHighlight.systemColor": {
 					"type": "string",
 					"default": "#4FC3F7",
 					"description": "Editor color for Godot/system function names."
+				},
+				"godpartyGodotTools.functionHighlight.propertyColor": {
+					"type": "string",
+					"default": "#C792EA",
+					"description": "Editor color for Godot engine property names."
 				},
 				"godpartyGodotTools.functionHighlight.projectColor": {
 					"type": "string",
@@ -504,6 +510,9 @@
 					],
 					"godotSystemFunction": [
 						"support.function.godot-system"
+					],
+					"godotSystemProperty": [
+						"variable.other.property.godot-system"
 					],
 					"godotProjectFunction": [
 						"entity.name.function.godot-project"
