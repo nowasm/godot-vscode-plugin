@@ -2,7 +2,7 @@
 	"name": "godparty-godot-tools",
 	"displayName": "GodParty Godot Tools",
 	"icon": "icon.png",
-	"version": "0.1.4",
+	"version": "0.1.5",
 	"description": "Tools for game development with Godot Engine and GDScript",
 	"repository": {
 		"type": "git",
@@ -67,6 +67,41 @@
 			}
 		],
 		"commands": [
+			{
+				"category": "Godot Tools",
+				"command": "godotTools.debugger.filterSceneTree",
+				"title": "Search Remote Scene Tree",
+				"icon": "$(search)"
+			},
+			{
+				"category": "Godot Tools",
+				"command": "godotTools.debugger.clearSceneTreeFilter",
+				"title": "Clear Remote Scene Tree Search",
+				"icon": "$(clear-all)"
+			},
+			{
+				"category": "Godot Tools",
+				"command": "godotTools.debugger.enableNodeHighlight",
+				"title": "Enable Selected Node Outline",
+				"icon": "$(eye-closed)"
+			},
+			{
+				"category": "Godot Tools",
+				"command": "godotTools.debugger.disableNodeHighlight",
+				"title": "Disable Selected Node Outline",
+				"icon": "$(eye)"
+			},
+			{
+				"category": "Godot Tools",
+				"command": "godotTools.debugger.clearNodeHighlight",
+				"title": "Clear Selected Node Outline",
+				"icon": "$(close)"
+			},
+			{
+				"category": "Godot Tools",
+				"command": "godotTools.debugger.copyRemoteNodePath",
+				"title": "Copy Remote Node Path"
+			},
 			{
 				"category": "Godot Tools",
 				"command": "godotTools.openEditor",
@@ -300,20 +335,37 @@
 				},
 				"godpartyGodotTools.functionHighlight.systemFontStyle": {
 					"type": "string",
-					"enum": ["normal", "bold", "italic", "bold italic"],
+					"enum": [
+						"normal",
+						"bold",
+						"italic",
+						"bold italic"
+					],
 					"default": "normal",
 					"description": "Font style for Godot/system function names."
 				},
 				"godpartyGodotTools.functionHighlight.projectFontStyle": {
 					"type": "string",
-					"enum": ["normal", "bold", "italic", "bold italic"],
+					"enum": [
+						"normal",
+						"bold",
+						"italic",
+						"bold italic"
+					],
 					"default": "normal",
 					"description": "Font style for project-defined function names."
 				},
 				"godpartyGodotTools.functionHighlight.exclude": {
 					"type": "array",
-					"items": { "type": "string" },
-					"default": ["**/.godot/**", "**/.git/**", "**/build/**", "**/dist/**"],
+					"items": {
+						"type": "string"
+					},
+					"default": [
+						"**/.godot/**",
+						"**/.git/**",
+						"**/build/**",
+						"**/dist/**"
+					],
 					"description": "Glob patterns excluded from the project function index."
 				},
 				"godotTools.documentation.pageScale": {
@@ -427,6 +479,17 @@
 					"type": "boolean",
 					"default": true,
 					"description": "Whether to enable inlay hints in GDResource (.tscn, .tres, etc) files"
+				},
+				"godotTools.debugger.sceneTreeRefreshInterval": {
+					"type": "integer",
+					"default": 1000,
+					"minimum": 0,
+					"description": "Refresh interval in milliseconds for the visible Remote Scene Tree. Set to 0 to refresh manually. Intervals below 250 ms are limited to 250 ms."
+				},
+				"godotTools.debugger.highlightSelectedNode": {
+					"type": "boolean",
+					"default": true,
+					"description": "Outline the selected remote node in the running game using Godot's native runtime selection (Godot 4.4+ only). Game input remains enabled."
 				}
 			}
 		},
@@ -727,7 +790,7 @@
 			"debug": [
 				{
 					"id": "godotTools.activeSceneTree",
-					"name": "Active Scene Tree",
+					"name": "Remote Scene Tree",
 					"icon": "resources/godot_icon.svg"
 				},
 				{
@@ -747,7 +810,7 @@
 		"viewsWelcome": [
 			{
 				"view": "godotTools.activeSceneTree",
-				"contents": "Scene Tree data has not been requested"
+				"contents": "Start a Godot debug session to explore the running scene tree, including dynamically created UI nodes. Use Search to filter by name, class, or path."
 			},
 			{
 				"view": "godotTools.nodeInspector",
@@ -760,6 +823,22 @@
 		],
 		"menus": {
 			"commandPalette": [
+				{
+					"command": "godotTools.debugger.copyRemoteNodePath",
+					"when": "false"
+				},
+				{
+					"command": "godotTools.debugger.enableNodeHighlight",
+					"when": "godotTools.context.debugger.canHighlight && !godotTools.context.debugger.highlightEnabled"
+				},
+				{
+					"command": "godotTools.debugger.disableNodeHighlight",
+					"when": "godotTools.context.debugger.canHighlight && godotTools.context.debugger.highlightEnabled"
+				},
+				{
+					"command": "godotTools.debugger.clearNodeHighlight",
+					"when": "godotTools.context.debugger.canHighlight"
+				},
 				{
 					"command": "godotTools.listGodotClasses",
 					"when": "godotTools.context.connectedToLSP"
@@ -807,6 +886,31 @@
 			],
 			"view/title": [
 				{
+					"command": "godotTools.debugger.filterSceneTree",
+					"when": "view == godotTools.activeSceneTree",
+					"group": "navigation@1"
+				},
+				{
+					"command": "godotTools.debugger.clearSceneTreeFilter",
+					"when": "view == godotTools.activeSceneTree && godotTools.context.debugger.sceneTreeFiltered",
+					"group": "navigation@2"
+				},
+				{
+					"command": "godotTools.debugger.enableNodeHighlight",
+					"when": "view == godotTools.activeSceneTree && godotTools.context.debugger.canHighlight && !godotTools.context.debugger.highlightEnabled",
+					"group": "navigation@3"
+				},
+				{
+					"command": "godotTools.debugger.disableNodeHighlight",
+					"when": "view == godotTools.activeSceneTree && godotTools.context.debugger.canHighlight && godotTools.context.debugger.highlightEnabled",
+					"group": "navigation@3"
+				},
+				{
+					"command": "godotTools.debugger.clearNodeHighlight",
+					"when": "view == godotTools.activeSceneTree && godotTools.context.debugger.canHighlight",
+					"group": "navigation@4"
+				},
+				{
 					"command": "godotTools.debugger.refreshSceneTree",
 					"when": "view == godotTools.activeSceneTree",
 					"group": "navigation"
@@ -843,6 +947,11 @@
 				}
 			],
 			"view/item/context": [
+				{
+					"command": "godotTools.debugger.copyRemoteNodePath",
+					"when": "view == godotTools.activeSceneTree",
+					"group": "1"
+				},
 				{
 					"command": "godotTools.debugger.inspectNode",
 					"when": "view == godotTools.activeSceneTree",

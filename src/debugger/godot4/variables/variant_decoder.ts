@@ -214,6 +214,7 @@ export class VariantDecoder {
 	}
 
 	public get_dataset(buffer: Buffer) {
+		if (buffer.length < 4) return undefined;
 		const len = buffer.readUInt32LE(0);
 		if (buffer.length !== len + 4) {
 			return undefined;

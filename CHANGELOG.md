@@ -1,5 +1,13 @@
 # Changelog
 
+### 0.1.5 — GodParty fork
+
+- Load and automatically refresh the running scene tree without requiring a breakpoint, including Godot 3 protocol v2 projects.
+- Search runtime nodes by name, class or full path while retaining their ancestors; preserve expansion across refreshes and copy runtime node paths.
+- Click a runtime node to inspect its properties while the game runs, and clear stale selections when nodes are removed or a debug session ends.
+- Outline selected nodes using the standard Godot 4.4+ native debugger protocol, with toggle/clear controls and game input left enabled. Godot 3 has no outline feature.
+- Buffer fragmented legacy debugger packet headers safely.
+
 ### 0.1.4 — GodParty fork
 
 - Detect Godot 3 and Godot 4 projects from `project.godot` and connect to the matching editor language-server port by default. Explicit LSP port settings still take precedence.

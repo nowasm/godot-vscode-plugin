@@ -24,6 +24,10 @@ export function split_buffers(buffer: Buffer) {
 	let offset = 0;
 	const buffers: Buffer[] = [];
 	while (len > 0) {
+		if (len < 4) {
+			buffers.push(buffer.subarray(offset));
+			break;
+		}
 		const subLength = buffer.readUInt32LE(offset) + 4;
 		buffers.push(buffer.subarray(offset, offset + subLength));
 		offset += subLength;
@@ -46,7 +50,8 @@ export async function get_sub_values(value: any, variables_manager: VariablesMan
 			subValues = [];
 			for (const [key, val] of value.entries()) {
 				let key_name = "";
-				if (typeof key?.get_rendered_value === "function") { //  (key instanceof ObjectId), (key instanceof StringName)
+				if (typeof key?.get_rendered_value === "function") {
+					//  (key instanceof ObjectId), (key instanceof StringName)
 					key_name = await key.get_rendered_value(variables_manager);
 				} else {
 					key_name =

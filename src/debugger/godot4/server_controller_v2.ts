@@ -51,8 +51,13 @@ export class ServerController {
 	private pendingData = new Map<bigint, PendingDataV2>();
 	private heartbeat?: NodeJS.Timeout;
 	private stopping = false;
+	private sceneTreeRequestPending = false;
 
 	public constructor(public session: GodotDebugSessionV2) {}
+
+	public get is_connected(): boolean {
+		return !!this.controlSocket && !this.controlSocket.destroyed && !!this.dataSocket && !this.dataSocket.destroyed;
+	}
 
 	public get currentStopId() { return this.state.stopId; }
 	public get isPaused() { return this.state.paused; }
@@ -91,10 +96,12 @@ export class ServerController {
 	}
 
 	public request_scene_tree() {
+		if (!this.is_connected || this.sceneTreeRequestPending) return;
+		this.sceneTreeRequestPending = true;
 		void this.requestData("scene_snapshot", [], this.state.paused ? this.state.stopId : 0n).then((message) => {
 			const treeData = message.payload[1];
 			if (Array.isArray(treeData)) this.session.sceneTree.fill_tree(parse_next_scene_node(treeData));
-		}).catch((error) => log.warn(error.message));
+		}).catch((error) => log.warn(error.message)).finally(() => { this.sceneTreeRequestPending = false; });
 	}
 
 	public set_object_property(objectId: bigint, label: string, value: any) {
@@ -156,6 +163,7 @@ export class ServerController {
 				this.controlSocket = pair.control as net.Socket;
 				this.dataSocket = pair.data as net.Socket;
 				this.startHeartbeat();
+				this.request_scene_tree();
 				log.info(`Debugger v2 paired session ${pair.sessionId}, generation ${pair.generation}`);
 			}
 			return;

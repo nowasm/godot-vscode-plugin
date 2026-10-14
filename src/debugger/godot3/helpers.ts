@@ -1,4 +1,4 @@
-import { GodotVariable, } from "../debug_runtime";
+import { GodotVariable } from "../debug_runtime";
 import { SceneNode } from "../scene_tree_provider";
 
 export function parse_next_scene_node(params: any[], ofs: { offset: number } = { offset: 0 }): SceneNode {
@@ -20,6 +20,10 @@ export function split_buffers(buffer: Buffer) {
 	let offset = 0;
 	const buffers: Buffer[] = [];
 	while (len > 0) {
+		if (len < 4) {
+			buffers.push(buffer.subarray(offset));
+			break;
+		}
 		const subLength = buffer.readUInt32LE(offset) + 4;
 		buffers.push(buffer.subarray(offset, offset + subLength));
 		offset += subLength;
@@ -31,7 +35,7 @@ export function split_buffers(buffer: Buffer) {
 
 export function is_variable_built_in_type(va: GodotVariable) {
 	const type = typeof va.value;
-	return ["number", "bigint", "boolean", "string"].some(x => x === type);
+	return ["number", "bigint", "boolean", "string"].some((x) => x === type);
 }
 
 export function build_sub_values(va: GodotVariable) {
@@ -81,11 +85,7 @@ export function parse_variable(va: GodotVariable, i?: number) {
 		} else {
 			rendered_value = `${Number.parseFloat(value.toFixed(5))}`;
 		}
-	} else if (
-		typeof value === "bigint" ||
-		typeof value === "boolean" ||
-		typeof value === "string"
-	) {
+	} else if (typeof value === "bigint" || typeof value === "boolean" || typeof value === "string") {
 		rendered_value = `${value}`;
 	} else if (typeof value === "undefined") {
 		rendered_value = "null";

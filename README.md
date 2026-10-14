@@ -91,7 +91,7 @@ Godot 3.2 or later.
   - step-in/out/over
   - variable watch
   - call stack
-  - active scene tree
+  - searchable, automatically refreshed remote scene tree
   - inspector
 - GDResource (`.tscn` and `.tres`) language features:
   - syntax highlighting
@@ -179,6 +179,16 @@ To configure the GDScript debugger:
 4. Select the Debug Godot configuration.
 5. Change any relevant settings.
 6. Press F5 to launch.
+
+### Remote Scene Tree and UI inspection
+
+While a Godot debug session is running, open **Run and Debug → Remote Scene Tree**. The tree loads without requiring a breakpoint and includes dynamically created UI nodes. Click a node to display its properties in **Inspector**, or use its context menu to copy its full runtime node path.
+
+Use the tree's **Search** button to filter by node name, class, or path. Matching branches retain their parent nodes. Clear Search restores the full hierarchy. Node IDs preserve expansion across refreshes; Godot 4 nodes also display their hidden state when the engine supplies visibility information.
+
+The visible tree refreshes every second. Set `godotTools.debugger.sceneTreeRefreshInterval` to change the interval, or to `0` for manual refresh using the Refresh button.
+
+**Godot 3 supports the runtime tree, search, and node inspection.** On **Godot 4.4+ using the standard debugger protocol**, selecting a node also uses the engine's native runtime selection to outline its bounds in the running game. Use the eye button to toggle outlines, or Clear Selected Node Outline to remove the current outline. Outlines leave game input enabled and require no project scripts or engine modifications. They follow the engine's native selection drawing behavior; they are not a pixel-perfect browser box-model overlay. Set `godotTools.debugger.highlightSelectedNode` to `false` to disable them by default. Native outlines are unavailable on Godot 3 and Godot 4.0–4.3.
 
 ### _Configurations_
 

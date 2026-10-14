@@ -88,6 +88,7 @@ export class VariantDecoder {
 	}
 
 	public get_dataset(buffer: Buffer) {
+		if (buffer.length < 4) return undefined;
 		const len = buffer.readUInt32LE(0);
 		if (buffer.length !== len + 4) {
 			return undefined;
@@ -126,11 +127,7 @@ export class VariantDecoder {
 	}
 
 	private decode_Basis(model: BufferModel) {
-		return new Basis(
-			this.decode_Vector3(model),
-			this.decode_Vector3(model),
-			this.decode_Vector3(model)
-		);
+		return new Basis(this.decode_Vector3(model), this.decode_Vector3(model), this.decode_Vector3(model));
 	}
 
 	private decode_Color(model: BufferModel) {
@@ -364,11 +361,7 @@ export class VariantDecoder {
 	}
 
 	private decode_Transform2D(model: BufferModel) {
-		return new Transform2D(
-			this.decode_Vector2(model),
-			this.decode_Vector2(model),
-			this.decode_Vector2(model)
-		);
+		return new Transform2D(this.decode_Vector2(model), this.decode_Vector2(model), this.decode_Vector2(model));
 	}
 
 	private decode_Vector2(model: BufferModel) {

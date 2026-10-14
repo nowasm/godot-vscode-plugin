@@ -24,6 +24,7 @@ import { DecodedVariant, VariantDecoder } from "./variables/variant_decoder";
 import { VariantEncoder } from "./variables/variant_encoder";
 import { RawObject } from "./variables/variants";
 import { VariablesManager } from "./variables/variables_manager";
+import { RemoteInspector } from "./remote_inspector";
 
 const log = createLogger("debugger.controller", { output: "Godot Debugger" });
 const socketLog = createLogger("debugger.socket");
@@ -80,8 +81,40 @@ export class ServerController {
 	private projectVersionMajor: number;
 	private projectVersionMinor: number;
 	private projectVersionPoint: number;
+	private runtimeSelectionInitialized = false;
+	private sceneTreeRequestedAt?: number;
+	public remote_inspector = new RemoteInspector((id) => this.request_inspect_object(id));
 
 	public constructor(public session: GodotDebugSession) {}
+
+	public get is_connected(): boolean {
+		return !!this.socket && !this.socket.destroyed && this.threadId !== undefined;
+	}
+
+	public get supports_node_highlight(): boolean {
+		return this.projectVersionMajor === 4 && this.projectVersionMinor >= 4;
+	}
+
+	public highlight_node(object_id?: number | bigint, visible = true): boolean {
+		if (!this.is_connected || !this.supports_node_highlight) return false;
+		if (!this.runtimeSelectionInitialized) {
+			this.send_command("scene:runtime_node_select_setup", [new Map()]);
+			// Outlines must not intercept mouse/keyboard input in the running game.
+			this.send_command("scene:runtime_node_select_set_type", [0]);
+			this.runtimeSelectionInitialized = true;
+		}
+		this.send_command("scene:runtime_node_select_set_visible", [visible && object_id !== undefined]);
+		if (object_id !== undefined && visible) {
+			if (this.projectVersionMinor >= 5) {
+				this.send_command("scene:inspect_objects", [[BigInt(object_id)], true]);
+			} else {
+				this.request_inspect_object(BigInt(object_id));
+			}
+		} else if (object_id === undefined && this.projectVersionMinor >= 5) {
+			this.send_command("scene:clear_selection");
+		}
+		return true;
+	}
 
 	public setProjectVersion(projectVersion: string) {
 		const versionParts = projectVersion.split(".").map(Number);
@@ -125,6 +158,12 @@ export class ServerController {
 	}
 
 	public request_scene_tree() {
+		if (
+			!this.is_connected ||
+			(this.sceneTreeRequestedAt !== undefined && Date.now() - this.sceneTreeRequestedAt < 5000)
+		)
+			return;
+		this.sceneTreeRequestedAt = Date.now();
 		this.send_command("scene:request_scene_tree");
 	}
 
@@ -429,26 +468,36 @@ export class ServerController {
 				break;
 			case "set_pid":
 				this.threadId = command.threadId;
+				this.request_scene_tree();
 				break;
 			case "scene:scene_tree": {
+				this.sceneTreeRequestedAt = undefined;
 				const tree = parse_next_scene_node(command.parameters);
 				this.session.sceneTree.fill_tree(tree);
 				break;
 			}
 			case "scene:inspect_object": {
-				if (this.session.variables_manager === undefined) {
-					log.error("Unexpected 'scene:inspect_object' received. Should be inside 'debug_enter' / 'debug_exit'.");
+				this.remote_inspector.resolve(command.parameters);
+				if (this.session.variables_manager === undefined || command.parameters.length < 3) {
 					return;
 				}
 				let godot_id = BigInt(command.parameters[0] as number);
 				const className: string = command.parameters[1] as string;
-				const properties: [string, string, number, string, number, any][] = command.parameters[2] as [string, string, number, string, number, any][];
+				const properties: [string, string, number, string, number, any][] = command.parameters[2] as [
+					string,
+					string,
+					number,
+					string,
+					number,
+					any,
+				][];
 
 				// message:inspect_object returns the id as an unsigned 64 bit integer, but it is decoded as a signed 64 bit integer,
 				// thus we need to convert it to its equivalent unsigned value here.
 				if (godot_id < 0) {
 					godot_id = godot_id + BigInt(2) ** BigInt(64);
 				}
+				if (!this.session.variables_manager.godot_object_promises.has(godot_id)) return;
 
 				// SceneDebuggerProperty is Pair<PropertyInfo, Variant>
 				// PropertyInfo:
@@ -463,7 +512,14 @@ export class ServerController {
 				const rawObject = new RawObject(className);
 				let category = "";
 				for (const prop of properties) {
-					const [name, class_name, hint, hint_string, usage, value, ...tail]: [string, string, number, string, number, any] = prop;
+					const [name, class_name, hint, hint_string, usage, value, ...tail]: [
+						string,
+						string,
+						number,
+						string,
+						number,
+						any,
+					] = prop;
 					if (usage === 128) {
 						category = name;
 						continue; // not a variable - just a category grouping element for UI for subsequent items
@@ -478,8 +534,11 @@ export class ServerController {
 							var_name = name.slice("Constants/".length);
 						} else if (name.includes("/")) {
 							var_name = name;
-						} else { // extra check for potential override values:
-							log.error(`Unknown property name: '${name}'. Expected it to start with "Members/" or "Constants/" or contain "/"`);
+						} else {
+							// extra check for potential override values:
+							log.error(
+								`Unknown property name: '${name}'. Expected it to start with "Members/" or "Constants/" or contain "/"`,
+							);
 							var_name = name;
 						}
 					}
@@ -502,6 +561,11 @@ export class ServerController {
 				}
 				break;
 			}
+			case "remote_objects_selected":
+			case "remote_nothing_selected":
+			case "remote_selection_invalidated":
+				// Native highlight acknowledgements; Inspector uses its own timed request.
+				break;
 			case "stack_dump": {
 				const frames: GodotStackFrame[] = [];
 
@@ -598,7 +662,7 @@ export class ServerController {
 				const console = debug.activeDebugConsole;
 				const params = command.parameters[0] as DecodedVariant[];
 				for (const output of params) {
-					for (const line of (output as string || "").split("\n")) {
+					for (const line of ((output as string) || "").split("\n")) {
 						console.appendLine(bbcodeParser.parse(line));
 					}
 				}
@@ -629,7 +693,7 @@ export class ServerController {
 			warning: params[9] as boolean,
 			stack: [] as { msg: string; extras: any }[],
 		};
-		const stackCount = params[10] as number ?? 0;
+		const stackCount = (params[10] as number) ?? 0;
 		for (let i = 0; i < stackCount; i += 3) {
 			const file = params[11 + i] as string;
 			const func = params[12 + i] as string;
@@ -706,9 +770,13 @@ export class ServerController {
 
 	public stop() {
 		log.info("Stopping debug controller");
+		this.remote_inspector.clear();
+		this.runtimeSelectionInitialized = false;
+		this.sceneTreeRequestedAt = undefined;
 		killSubProcesses("debug");
 
 		this.socket?.destroy();
+		this.socket = undefined;
 		this.server?.close((error) => {
 			if (error) {
 				log.error(error);
