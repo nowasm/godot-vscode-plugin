@@ -151,14 +151,8 @@ export class GodotDebugger implements DebugAdapterDescriptorFactory, DebugConfig
 				if (this.sceneTree.view.visible) this.refresh_scene_tree();
 			}),
 			this.sceneTree.onDidUpdateTree(() => {
-				this.inspectorColumns.setHighlight(
-					this.session instanceof Godot4DebugSession && this.session.controller.supports_node_highlight,
-					this.highlightEnabled,
-				);
-				set_context(
-					"debugger.canHighlight",
-					this.session instanceof Godot4DebugSession && this.session.controller.supports_node_highlight,
-				);
+				this.inspectorColumns.setHighlight(this.supports_node_highlight, this.highlightEnabled);
+				set_context("debugger.canHighlight", this.supports_node_highlight);
 				if (this.selectedNodeId !== undefined && !this.sceneTree.find_node(this.selectedNodeId)) {
 					this.clear_node_highlight();
 					this.inspector.clear();
@@ -464,10 +458,7 @@ export class GodotDebugger implements DebugAdapterDescriptorFactory, DebugConfig
 
 	public set_node_highlight(enabled: boolean) {
 		this.highlightEnabled = enabled;
-		this.inspectorColumns.setHighlight(
-			this.session instanceof Godot4DebugSession && this.session.controller.supports_node_highlight,
-			enabled,
-		);
+		this.inspectorColumns.setHighlight(this.supports_node_highlight, enabled);
 		set_context("debugger.highlightEnabled", enabled);
 		this.update_node_highlight();
 	}
@@ -478,8 +469,15 @@ export class GodotDebugger implements DebugAdapterDescriptorFactory, DebugConfig
 		this.update_node_highlight();
 	}
 
+	private get supports_node_highlight(): boolean {
+		return (
+			(this.session instanceof Godot4DebugSession || this.session instanceof Godot3DebugSession) &&
+			this.session.controller.supports_node_highlight
+		);
+	}
+
 	private update_node_highlight() {
-		if (this.session instanceof Godot4DebugSession) {
+		if (this.session instanceof Godot4DebugSession || this.session instanceof Godot3DebugSession) {
 			this.session.controller.highlight_node(this.selectedNodeId, this.highlightEnabled);
 		}
 	}

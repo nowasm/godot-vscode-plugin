@@ -192,7 +192,9 @@ Use the scene column's search field (or the sidebar tree's **Search** button) to
 
 The visible tree refreshes every second. Set `godotTools.debugger.sceneTreeRefreshInterval` to change the interval, or to `0` for manual refresh using the Refresh button.
 
-**Godot 3 supports the runtime tree, search, and node inspection.** On **Godot 4.4+ using the standard debugger protocol**, selecting a node also uses the engine's native runtime selection to outline its bounds in the running game. Use the eye button to toggle outlines, or Clear Selected Node Outline to remove the current outline. Outlines leave game input enabled and require no project scripts or engine modifications. They follow the engine's native selection drawing behavior; they are not a pixel-perfect browser box-model overlay. Set `godotTools.debugger.highlightSelectedNode` to `false` to disable them by default. Native outlines are unavailable on Godot 3 and Godot 4.0–4.3.
+**Godot 3 supports the runtime tree, search, and node inspection.** The custom **Godot 3 v2 engine with the `runtime_node_select` capability** also outlines selected UI/2D nodes and draws bounds for 3D Spatial nodes. This is an engine backport of Godot 4's native bounds renderer; older Godot 3 v2 binaries continue to work with outlines disabled. No autoload or game script is required, and game input remains enabled.
+
+On **Godot 4.4+ using the standard debugger protocol**, selecting a node uses the engine's native runtime selection to outline its bounds in the running game. Use the outline button to toggle outlines, or **Clear Selected Node Outline** to remove the current outline. Set `godotTools.debugger.highlightSelectedNode` to `false` to disable them by default. Bounds follow native engine selection behavior; they are not a pixel-perfect browser box-model overlay. Outlines remain unavailable on stock Godot 3, older custom Godot 3 builds, Godot 4.0–4.3, and the existing Godot 4 custom v2 adapter.
 
 ### _Configurations_
 

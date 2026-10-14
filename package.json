@@ -2,7 +2,7 @@
 	"name": "godparty-godot-tools",
 	"displayName": "GodParty Godot Tools",
 	"icon": "icon.png",
-	"version": "0.1.6",
+	"version": "0.1.7",
 	"description": "Tools for game development with Godot Engine and GDScript",
 	"repository": {
 		"type": "git",
@@ -505,7 +505,7 @@
 				"godotTools.debugger.highlightSelectedNode": {
 					"type": "boolean",
 					"default": true,
-					"description": "Outline the selected remote node in the running game using Godot's native runtime selection (Godot 4.4+ only). Game input remains enabled."
+					"description": "Outline the selected remote node in the running game using native runtime selection (standard Godot 4.4+, or a Godot 3 v2 build advertising runtime_node_select). Game input remains enabled."
 				}
 			}
 		},

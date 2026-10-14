@@ -1,5 +1,11 @@
 # Changelog
 
+### 0.1.7 — GodParty fork
+
+- Highlight selected UI/2D and 3D Spatial nodes with the custom Godot 3 v2 engine's native `runtime_node_select` backport. Toggle or clear outlines from the existing Inspector controls without intercepting game input.
+- Negotiate selection support through optional hello capabilities on both debugger channels. Older Godot 3 v2 binaries continue to support the tree and Inspector without receiving unsupported selection requests.
+- Restore the requested outline after a channel reconnect; keep runtime selection independent of breakpoint-scoped variable handles.
+
 ### 0.1.6 — GodParty fork
 
 - Open the runtime scene tree and selected node properties in two independent editor columns between the debug sidebar and source code. Resize or move them like other editor tabs.

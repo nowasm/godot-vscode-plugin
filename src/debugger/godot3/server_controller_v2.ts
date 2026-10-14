@@ -51,6 +51,8 @@ export class ServerController {
 	private heartbeat?: NodeJS.Timeout;
 	private stopping = false;
 	private sceneTreeRequestPending = false;
+	private nodeHighlightSupported = false;
+	private lastHighlight?: { id?: number | bigint; visible: boolean };
 
 	public constructor(public session: GodotDebugSession) {}
 
@@ -60,6 +62,15 @@ export class ServerController {
 
 	public get currentStopId() { return this.state.stopId; }
 	public get isPaused() { return this.state.paused; }
+	public get supports_node_highlight(): boolean { return this.nodeHighlightSupported; }
+
+	public highlight_node(objectId?: number | bigint, visible = true): boolean {
+		this.lastHighlight = { id: objectId, visible };
+		if (!this.is_connected || !this.nodeHighlightSupported) return false;
+		void this.requestData("runtime_node_select", [objectId === undefined ? 0n : BigInt(objectId), visible && objectId !== undefined], 0n)
+			.catch((error) => log.warn(`Unable to highlight selected node: ${error.message}`));
+		return true;
+	}
 
 	public break() { return this.execute("pause"); }
 	public continue() { return this.execute("continue"); }
@@ -157,7 +168,12 @@ export class ServerController {
 				this.state.activate(pair);
 				this.controlSocket = pair.control as net.Socket;
 				this.dataSocket = pair.data as net.Socket;
+				this.nodeHighlightSupported = [this.controlSocket, this.dataSocket].every((socket) => {
+					const capabilities = this.contexts.get(socket)?.hello?.payload[3];
+					return Array.isArray(capabilities) && capabilities.includes("runtime_node_select");
+				});
 				this.startHeartbeat();
+				if (this.lastHighlight) this.highlight_node(this.lastHighlight.id, this.lastHighlight.visible);
 				this.request_scene_tree();
 				log.info(`Debugger v2 paired session ${pair.sessionId}, generation ${pair.generation}`);
 			}
@@ -278,6 +294,7 @@ export class ServerController {
 		if (context.socket === this.controlSocket) this.controlSocket = undefined;
 		if (context.socket === this.dataSocket) this.dataSocket = undefined;
 		if (!this.controlSocket || !this.dataSocket) {
+			this.nodeHighlightSupported = false;
 			if (this.heartbeat) clearInterval(this.heartbeat);
 			this.heartbeat = undefined;
 			this.rejectPending(new Error("Debugger v2 channel disconnected; waiting for engine reconnect"));
