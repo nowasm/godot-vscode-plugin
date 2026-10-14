@@ -1,5 +1,11 @@
 # Changelog
 
+### 0.1.8 — GodParty fork
+
+- Expand Object references directly in the Inspector to load their real properties, including objects inside arrays and dictionaries, on Godot 3 protocol v2, standard Godot 4 and Godot 4 protocol v2.
+- Recognize references from each engine's Variant decoder, preserve 64-bit object IDs, and keep the current scene selection while inspecting nested data. Support both the editor columns and sidebar Inspector.
+- Load objects on demand, share simultaneous requests, stop circular paths, and show released-object or timeout errors inside the branch with retry on reopening. Preserve expanded object details and scroll when refreshing; discard stale responses after selection changes or session termination.
+
 ### 0.1.7 — GodParty fork
 
 - Highlight selected UI/2D and 3D Spatial nodes with the custom Godot 3 v2 engine's native `runtime_node_select` backport. Toggle or clear outlines from the existing Inspector controls without intercepting game input.

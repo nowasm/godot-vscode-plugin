@@ -35,6 +35,7 @@ export interface ColumnRow {
 	icon?: string;
 	editable?: boolean;
 	inspectable?: boolean;
+	loadState?: RemoteProperty["loadState"];
 	children: ColumnRow[];
 }
 
@@ -214,6 +215,7 @@ export class InspectorColumns implements Disposable {
 				description: String(property.description ?? ""),
 				editable: property.contextValue === "editable_value",
 				inspectable: property.contextValue === "remote_object",
+				loadState: property.loadState,
 				children: property.properties.map((child, index) => visit(child, `${id}/${index}:${child.label}`)),
 			};
 		};
@@ -227,6 +229,7 @@ export class InspectorColumns implements Disposable {
 			type: "snapshot",
 			kind,
 			connected: this.connected,
+			revision: this.inspector.revision,
 			rows: kind === "scene" ? this.sceneRows(panel.webview) : this.propertyRows(),
 			filter: this.scene.filter,
 			selectedId: this.selectedId,
@@ -264,6 +267,8 @@ export class InspectorColumns implements Disposable {
 				const property = this.properties.get(id);
 				if (!property) return;
 				if (type === "edit" && property.contextValue === "editable_value") await this.actions.edit(property);
+				else if (type === "expand" && property.contextValue === "remote_object")
+					await this.inspector.expand_object(property);
 				else if (type === "inspect" && property.contextValue === "remote_object")
 					await this.actions.inspect(property);
 			}

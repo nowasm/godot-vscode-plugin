@@ -86,7 +86,7 @@ class GDFileDecorationProvider implements FileDecorationProvider {
 export class GodotDebugger implements DebugAdapterDescriptorFactory, DebugConfigurationProvider {
 	public session?: Godot3DebugSession | Godot4DebugSession | Godot4DebugSessionV2;
 	public sceneTree = new SceneTreeProvider();
-	public inspector = new InspectorProvider();
+	public inspector = new InspectorProvider((id) => this.inspect_object(id));
 	public inspectorColumns = new InspectorColumns(this.sceneTree, this.inspector, {
 		inspect: (node) => this.inspect_node(node),
 		edit: (property) => this.edit_value(property),
@@ -371,38 +371,37 @@ export class GodotDebugger implements DebugAdapterDescriptorFactory, DebugConfig
 			this.inspectorColumns.select(element);
 			this.update_node_highlight();
 		}
+		if (this.inspector.get_top_item()?.object_id !== element.object_id) this.inspector.clear();
 		await this.fill_inspector(element);
 	}
 
-	private async fill_inspector(element: SceneNode | RemoteProperty, force_refresh = false) {
+	private async fill_inspector(element: SceneNode | RemoteProperty) {
 		const session = this.session;
 		const generation = ++this.inspectionGeneration;
 		if (element.object_id === undefined || !session?.controller.is_connected) {
 			return;
 		}
 
-		if (session instanceof Godot4DebugSession) {
-			try {
-				const godot_object = await (session.variables_manager
-					? session.variables_manager.get_godot_object(BigInt(element.object_id), force_refresh)
-					: session.controller.remote_inspector.inspect(BigInt(element.object_id)));
-				if (generation !== this.inspectionGeneration || session !== this.session) return;
-				const va = this.create_godot_variable(godot_object);
-				this.inspector.fill_tree(element.label, godot_object.type, Number(godot_object.godot_id), va);
-			} catch (error) {
-				if (generation !== this.inspectionGeneration || session !== this.session) return;
-				log.warn("Unable to inspect remote node", error);
-				this.inspector.clear();
-				this.inspector.view.message =
-					error instanceof Error ? error.message : "Unable to inspect the remote node.";
-			}
-		} else {
-			session.inspect_callbacks.set(BigInt(element.object_id), (class_name, variable) => {
-				if (generation !== this.inspectionGeneration || session !== this.session) return;
-				this.inspector.fill_tree(element.label, class_name, Number(element.object_id), variable);
-			});
-			session.controller.request_inspect_object(BigInt(element.object_id));
+		try {
+			const { className, variable } = await this.inspect_object(BigInt(element.object_id));
+			if (generation !== this.inspectionGeneration || session !== this.session) return;
+			this.inspector.fill_tree(element.label, className, element.object_id, variable);
+		} catch (error) {
+			if (generation !== this.inspectionGeneration || session !== this.session) return;
+			log.warn("Unable to inspect remote node", error);
+			this.inspector.clear();
+			this.inspector.view.message = error instanceof Error ? error.message : "Unable to inspect the remote node.";
 		}
+	}
+
+	public async inspect_object(id: bigint) {
+		const session = this.session;
+		if (!session?.controller.is_connected) throw new Error("The debug session has ended.");
+		if (session instanceof Godot4DebugSession) {
+			const object = await session.controller.remote_inspector.inspect(id);
+			return { className: object.type, variable: this.create_godot_variable(object) };
+		}
+		return session.controller.inspect_object(id);
 	}
 
 	private create_godot_variable(godot_object: GodotObject): GodotVariable {
@@ -486,7 +485,7 @@ export class GodotDebugger implements DebugAdapterDescriptorFactory, DebugConfig
 		if (this.inspector.has_tree()) {
 			const item = this.inspector.get_top_item();
 			if (item) {
-				await this.fill_inspector(item, /*force_refresh*/ true);
+				await this.fill_inspector(item);
 			}
 		}
 	}
@@ -551,7 +550,7 @@ export class GodotDebugger implements DebugAdapterDescriptorFactory, DebugConfig
 
 		const item = this.inspector.get_top_item();
 		if (item) {
-			await this.fill_inspector(item, /*force_refresh*/ true);
+			await this.fill_inspector(item);
 		}
 
 		// const res = await debug.activeDebugSession?.customRequest("refreshVariables"); // refresh vscode.debug variables

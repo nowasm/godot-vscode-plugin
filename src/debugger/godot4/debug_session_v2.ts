@@ -194,6 +194,7 @@ export class GodotDebugSessionV2 extends LoggingDebugSession {
 		variable.sub_values = [...object.entries()].map(([name, value]) => ({ name: String(name), value }));
 		this.inspect_callbacks.get(id)?.(className, variable);
 		this.inspect_callbacks.delete(id);
+		return { className, variable };
 	}
 
 	private fail(response: DebugProtocol.Response, error: unknown) {

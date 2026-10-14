@@ -188,6 +188,8 @@ Use **Godot Tools: Open Scene Tree and Inspector Columns** from the Command Pale
 
 The tree loads without requiring a breakpoint and includes dynamically created UI nodes. Click a node to display its properties in **Godot Inspector**. Use the copy button on a node to copy its runtime path. Filter properties in the Inspector column, and use the pencil beside an editable value (or F2) to change it.
 
+Expand an **Object** value to load its detailed properties in place, including references inside arrays and dictionaries. Nested objects load only when expanded; the selected scene node and outline stay intact. The ↗ action opens an object as the Inspector root. Circular paths display an ancestor reference, and unavailable objects display an error in their branch; close and reopen the branch to retry. Refresh reloads expanded objects while preserving their expansion and scroll. Property filtering searches the data already loaded. Available with Godot 3 protocol v2, standard Godot 4, and Godot 4 protocol v2, in both the editor column and sidebar Inspector.
+
 Use the scene column's search field (or the sidebar tree's **Search** button) to filter by node name, class, or path. Matching branches retain their parent nodes. Clearing the field restores the full hierarchy. Node IDs preserve expansion and scroll across refreshes; Godot 4 nodes also display their hidden state when the engine supplies visibility information. Use arrow keys to navigate and expand branches, and Enter to inspect the focused node.
 
 The visible tree refreshes every second. Set `godotTools.debugger.sceneTreeRefreshInterval` to change the interval, or to `0` for manual refresh using the Refresh button.

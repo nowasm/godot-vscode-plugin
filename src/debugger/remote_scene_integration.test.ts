@@ -1,8 +1,10 @@
 import { strict as assert } from "node:assert";
+import * as path from "node:path";
 import * as vscode from "vscode";
 import { globals } from "../extension";
 import { GodotDebugSession as Godot3Session } from "./godot3/debug_session";
 import { GodotDebugSession as Godot4Session } from "./godot4/debug_session";
+import { GodotDebugSessionV2 as Godot4SessionV2 } from "./godot4/debug_session_v2";
 import type { SceneNode } from "./scene_tree_provider";
 
 function current_debugger() {
@@ -71,6 +73,27 @@ suite("Remote UI integration - Godot 4", () => {
 		assert.equal(dbg.inspector.get_top_item()?.description, "Button");
 
 		const ui = find_node("RemoteUI");
+		await dbg.inspect_node(ui);
+		const root = dbg.inspector.get_top_item();
+		assert(root);
+		const references = root.properties.find((property) => property.label.endsWith("object_refs"));
+		assert(references, "script Array of object references should be available");
+		const reference = references.properties[0];
+		assert.equal(reference.contextValue, "remote_object");
+		await dbg.inspector.expand_object(reference);
+		assert.equal(reference.description, `Button<${button.object_id}>`);
+		assert(
+			reference.properties.some((property) => /(^|\/)text$/.test(property.label) && property.value === "Play"),
+		);
+		assert.equal(dbg.inspector.get_top_item(), root, "expansion should not navigate away from RemoteUI");
+		await dbg.inspector.expand_object(references.properties[1]);
+		assert.match(references.properties[1].properties[0].label, /Circular reference/);
+		await dbg.inspector.expand_object(references.properties[2]);
+		assert(references.properties[2].properties.some((property) => property.value === "Inspectable resource"));
+		const dictionary = root.properties.find((property) => property.label.endsWith("object_dictionary"));
+		assert(dictionary);
+		await dbg.inspector.expand_object(dictionary.properties[0]);
+		assert.match(String(dictionary.properties[0].description), /^Button</);
 		dbg.session.controller.set_object_property(BigInt(ui.object_id), "show_dynamic_child", true);
 		await wait_until(
 			() => nodes().some((node) => node.label === "RuntimeLabel"),
@@ -92,10 +115,121 @@ suite("Remote UI integration - Godot 4", () => {
 	});
 });
 
+suite("Remote object inspection - Godot 4 protocol v2", () => {
+	test("loads object details while running through the v2 Inspector API", async function () {
+		const executable = process.env.GODOT_TOOLS_TEST_GODOT4_V2;
+		if (!executable) return this.skip();
+		this.timeout(30000);
+		await vscode.extensions.getExtension("godparty.godparty-godot-tools")?.activate();
+		const dbg = current_debugger();
+		const session = new Godot4SessionV2();
+		const project = path.resolve(__dirname, "../../test_projects/test-dap-project-godot4");
+		session.sceneTree = dbg.sceneTree;
+		session.inspector = dbg.inspector;
+		session.debug_data.projectPath = project;
+		dbg.session = session;
+		const poll = setInterval(() => session.controller.request_scene_tree(), 250);
+		try {
+			await session.controller.launch({
+				address: "127.0.0.1",
+				port: -1,
+				project,
+				editor_path: executable,
+				scene: "RemoteUI.tscn",
+				additional_options: "--headless --audio-driver Dummy",
+			} as any);
+			await wait_until(() => nodes().some((node) => node.label === "PlayButton"), "Godot 4 v2 UI");
+			await dbg.inspect_node(find_node("RemoteUI"));
+			const root = dbg.inspector.get_top_item();
+			assert(root);
+			const references = root.properties.find((property) => property.label.endsWith("object_refs"));
+			assert(references);
+			await dbg.inspector.expand_object(references.properties[0]);
+			assert(references.properties[0].properties.some((property) => property.value === "Play"));
+			assert.equal(dbg.inspector.get_top_item(), root);
+			assert.equal(session.debug_data.last_frames.length, 0);
+		} finally {
+			clearInterval(poll);
+			session.dispose();
+			dbg.session = undefined;
+			dbg.sceneTree.clear();
+			dbg.inspector.clear();
+		}
+	});
+});
+
 // Opt-in smoke test against a real Godot 3 project, without editing its files.
 const godot3 = process.env.GODOT_TOOLS_TEST_GODOT3;
 const godot3Project = process.env.GODOT_TOOLS_TEST_GODOT3_PROJECT;
 suite("Remote UI integration - Godot 3 project", () => {
+	test("expands real Godot 3 array/dictionary objects and handles cycles and released objects", async function () {
+		if (!godot3) return this.skip();
+		this.timeout(30000);
+		await vscode.extensions.getExtension("godparty.godparty-godot-tools")?.activate();
+		const dbg = current_debugger();
+		const session = new Godot3Session();
+		const project = path.resolve(__dirname, "../../test_projects/test-dap-project-godot3-v2");
+		session.sceneTree = dbg.sceneTree;
+		session.inspector = dbg.inspector;
+		session.debug_data.projectPath = project;
+		dbg.session = session;
+		try {
+			await session.controller.launch({
+				address: "127.0.0.1",
+				port: -1,
+				project,
+				editor_path: godot3,
+				scene: "InspectorRefs.tscn",
+				additional_options: "--no-window --audio-driver Dummy",
+			} as any);
+			await wait_until(() => session.controller.is_connected, "Godot 3 fixture connection");
+			const poll = setInterval(() => session.controller.request_scene_tree(), 250);
+			try {
+				await wait_until(() => nodes().some((node) => node.label === "TemporaryLabel"), "Godot 3 fixture tree");
+			} finally {
+				clearInterval(poll);
+			}
+			const ui = find_node("InspectorRefs");
+			await dbg.inspect_node(ui);
+			const root = dbg.inspector.get_top_item();
+			assert(root);
+			const references = root.properties.find((property) => property.label.endsWith("object_refs"));
+			assert(references);
+			const reference = references.properties[0];
+			await Promise.all([
+				dbg.inspector.expand_object(reference),
+				dbg.inspector.expand_object(references.properties[1]),
+			]);
+			assert(reference.properties.some((property) => property.label.endsWith("health") && property.value === 42));
+			assert(reference.properties.some((property) => property.value === "Detailed Godot 3 object"));
+			const owner = reference.properties.find((property) => property.label.endsWith("owner"));
+			assert(owner);
+			await dbg.inspector.expand_object(owner);
+			assert.match(owner.properties[0].label, /Circular reference/);
+			const dictionary = root.properties.find((property) => property.label.endsWith("object_dictionary"));
+			assert(dictionary);
+			await session.controller.break();
+			await wait_until(() => session.controller.isPaused, "Godot 3 pause");
+			await dbg.inspector.expand_object(dictionary.properties[0]);
+			assert(dictionary.properties[0].properties.some((property) => property.value === 42));
+			await session.controller.continue();
+			await wait_until(() => !session.controller.isPaused, "Godot 3 resume");
+			session.controller.set_object_property(BigInt(ui.object_id), "remove_child", true);
+			await new Promise((resolve) => setTimeout(resolve, 200));
+			session.controller.request_scene_tree();
+			await wait_until(() => !nodes().some((node) => node.label === "TemporaryLabel"), "released object");
+			await dbg.inspector.expand_object(references.properties[3]);
+			assert.equal(references.properties[3].loadState, "error");
+			assert.equal(dbg.inspector.get_top_item(), root);
+			assert.equal(session.debug_data.last_frames.length, 0);
+		} finally {
+			session.dispose();
+			dbg.session = undefined;
+			dbg.sceneTree.clear();
+			dbg.inspector.clear();
+		}
+	});
+
 	test("uses the VS Code session to inspect the game's UI and clean up", async function () {
 		if (!godot3 || !godot3Project || process.env.GODOT_TOOLS_TEST_GODOT3_VSCODE !== "true") return this.skip();
 		this.timeout(60000);

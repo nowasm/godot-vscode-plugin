@@ -1,20 +1,38 @@
 import { EventEmitter, TreeDataProvider, TreeItem, TreeItemCollapsibleState, TreeView, window } from "vscode";
-import { GodotVariable, ObjectId, RawObject } from "./debug_runtime";
+import { GodotVariable } from "./debug_runtime";
+
+export interface InspectedObject {
+	className: string;
+	variable: GodotVariable;
+}
+
+// Godot 3 and 4 have separate Variant classes. RIDs also carry an ID but are not Objects.
+function object_reference(value: any): bigint | undefined {
+	if (typeof value?.id !== "bigint" || typeof value.type_name !== "function") return;
+	return ["Object", "ObjectId"].includes(value.type_name()) ? BigInt.asUintN(64, value.id) : undefined;
+}
 
 export class InspectorProvider implements TreeDataProvider<RemoteProperty> {
 	private changeTreeEvent = new EventEmitter<void>();
 	onDidChangeTreeData = this.changeTreeEvent.event;
 
 	private root: RemoteProperty | undefined;
+	public revision = 0;
+	private pending = new Map<bigint, Promise<InspectedObject>>();
 	public view: TreeView<RemoteProperty>;
 
-	constructor() {
+	constructor(private loadObject: (id: bigint) => Promise<InspectedObject>) {
 		this.view = window.createTreeView("godotTools.nodeInspector", {
 			treeDataProvider: this,
+		});
+		this.view.onDidExpandElement(({ element }) => {
+			if (element.loadState === "error") void this.expand_object(element);
 		});
 	}
 
 	public clear() {
+		this.revision++;
+		this.pending.clear();
 		this.view.description = undefined;
 		this.view.message = undefined;
 
@@ -24,8 +42,11 @@ export class InspectorProvider implements TreeDataProvider<RemoteProperty> {
 		}
 	}
 
-	public fill_tree(element_name: string, class_name: string, object_id: number, variable: GodotVariable) {
+	public fill_tree(element_name: string, class_name: string, object_id: number | bigint, variable: GodotVariable) {
+		this.revision++;
+		this.pending.clear();
 		this.root = this.parse_variable(variable, object_id);
+		this.root.reference_id = BigInt(object_id);
 		this.root.label = element_name;
 		this.root.collapsibleState = TreeItemCollapsibleState.Expanded;
 		this.root.description = class_name;
@@ -40,8 +61,72 @@ export class InspectorProvider implements TreeDataProvider<RemoteProperty> {
 		if (!element) {
 			return [this.root];
 		} else {
+			if (element.loadState === "unloaded") void this.expand_object(element);
 			return element.properties;
 		}
+	}
+
+	/** Load only the explicitly expanded reference, keeping the selected scene node intact. */
+	public async expand_object(property: RemoteProperty): Promise<void> {
+		if (!property.reference_id || !property.loadState || property.loadState === "loaded") return;
+		if (property.loading) return property.loading;
+		let root = property;
+		let circular: RemoteProperty | undefined;
+		for (let parent = property.parent; parent; parent = parent.parent) {
+			root = parent;
+			if (parent.reference_id === property.reference_id) circular = parent;
+		}
+		if (root !== this.root) return;
+		if (circular) {
+			property.loadState = "loaded";
+			property.properties = [this.message_property(`Circular reference to ${circular.label}`, property)];
+			this.changeTreeEvent.fire();
+			return;
+		}
+		const revision = this.revision;
+		const id = property.reference_id;
+		property.loadState = "loading";
+		property.properties = [this.message_property("Loading object properties…", property)];
+		let request = this.pending.get(id);
+		if (!request) {
+			request = Promise.resolve().then(() => this.loadObject(id));
+			this.pending.set(id, request);
+		}
+		property.loading = (async () => {
+			try {
+				const { className, variable } = await request;
+				if (revision !== this.revision) return;
+				const object = this.parse_variable(variable, id);
+				property.properties = object.properties;
+				for (const child of property.properties) child.parent = property;
+				property.description = `${className}<${id}>`;
+				property.loadState = "loaded";
+				property.collapsibleState = property.properties.length
+					? TreeItemCollapsibleState.Collapsed
+					: TreeItemCollapsibleState.None;
+			} catch (error) {
+				if (revision !== this.revision) return;
+				property.loadState = "error";
+				property.properties = [
+					this.message_property(
+						`${error instanceof Error ? error.message : String(error)} Close and expand to retry.`,
+						property,
+					),
+				];
+			} finally {
+				if (this.pending.get(id) === request) this.pending.delete(id);
+				property.loading = undefined;
+				if (revision === this.revision) this.changeTreeEvent.fire();
+			}
+		})();
+		this.changeTreeEvent.fire();
+		return property.loading;
+	}
+
+	private message_property(message: string, parent: RemoteProperty): RemoteProperty {
+		const property = new RemoteProperty(message, undefined, undefined, [], TreeItemCollapsibleState.None);
+		property.parent = parent;
+		return property;
 	}
 
 	public getTreeItem(element: RemoteProperty): TreeItem | Thenable<TreeItem> {
@@ -76,8 +161,9 @@ export class InspectorProvider implements TreeDataProvider<RemoteProperty> {
 		return this.root !== undefined;
 	}
 
-	private parse_variable(va: GodotVariable, object_id?: number): RemoteProperty {
+	private parse_variable(va: GodotVariable, object_id?: number | bigint): RemoteProperty {
 		const value = va.value;
+		const reference = object_reference(value);
 		let rendered_value = "";
 
 		if (typeof value === "number") {
@@ -88,14 +174,14 @@ export class InspectorProvider implements TreeDataProvider<RemoteProperty> {
 			}
 		} else if (typeof value === "bigint" || typeof value === "boolean" || typeof value === "string") {
 			rendered_value = `${value}`;
-		} else if (typeof value === "undefined") {
+		} else if (value === undefined || value === null || reference === 0n) {
 			rendered_value = "null";
 		} else {
 			if (Array.isArray(value)) {
 				rendered_value = `Array[${value.length}]`;
 			} else if (value instanceof Map) {
-				if (value instanceof RawObject) {
-					rendered_value = `${value.class_name}`;
+				if (typeof (value as any).class_name === "string") {
+					rendered_value = `${(value as any).class_name}`;
 				} else {
 					rendered_value = `Dictionary[${value.size}]`;
 				}
@@ -106,9 +192,9 @@ export class InspectorProvider implements TreeDataProvider<RemoteProperty> {
 
 		let child_props: RemoteProperty[] = [];
 
-		if (value) {
+		if (value && reference === undefined) {
 			let sub_variables: any[] = [];
-			if (typeof value.sub_values === "function" && value instanceof ObjectId === false) {
+			if (typeof value.sub_values === "function") {
 				sub_variables = value.sub_values();
 			} else if (Array.isArray(value)) {
 				sub_variables = value.map((va, i) => {
@@ -122,9 +208,10 @@ export class InspectorProvider implements TreeDataProvider<RemoteProperty> {
 				});
 			}
 
-			child_props = sub_variables?.map((va: any) => {
-				return this.parse_variable(va, object_id);
-			}) || [];
+			child_props =
+				sub_variables?.map((va: any) => {
+					return this.parse_variable(va, object_id);
+				}) || [];
 		}
 
 		const out_prop = new RemoteProperty(
@@ -140,9 +227,13 @@ export class InspectorProvider implements TreeDataProvider<RemoteProperty> {
 		}
 		out_prop.description = rendered_value;
 
-		if (value instanceof ObjectId) {
+		if (reference !== undefined && reference !== 0n) {
 			out_prop.contextValue = "remote_object";
-			out_prop.object_id = Number(value.id);
+			out_prop.object_id = reference;
+			out_prop.reference_id = reference;
+			out_prop.loadState = "unloaded";
+			out_prop.collapsibleState = TreeItemCollapsibleState.Collapsed;
+			out_prop.properties = [this.message_property("Expand to load object properties", out_prop)];
 		} else if (
 			typeof value === "number" ||
 			typeof value === "bigint" ||
@@ -150,7 +241,7 @@ export class InspectorProvider implements TreeDataProvider<RemoteProperty> {
 			typeof value === "string"
 		) {
 			out_prop.contextValue = "editable_value";
-		} else if (Array.isArray(value) || (value instanceof Map && value instanceof RawObject === false)) {
+		} else if (Array.isArray(value) || value instanceof Map) {
 			for (const prop of out_prop.properties) {
 				prop.parent = out_prop;
 			}
@@ -163,11 +254,14 @@ export class InspectorProvider implements TreeDataProvider<RemoteProperty> {
 export class RemoteProperty extends TreeItem {
 	public changes_parent?: boolean;
 	public parent?: RemoteProperty;
+	public reference_id?: bigint;
+	public loadState?: "unloaded" | "loading" | "loaded" | "error";
+	public loading?: Promise<void>;
 
 	constructor(
 		public label: string,
 		public value: any,
-		public object_id: number | undefined,
+		public object_id: number | bigint | undefined,
 		public properties: RemoteProperty[],
 		public collapsibleState?: TreeItemCollapsibleState,
 	) {

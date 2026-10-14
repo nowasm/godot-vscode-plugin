@@ -100,9 +100,13 @@ export class ServerController {
 	}
 
 	public request_inspect_object(objectId: bigint) {
-		void this.requestData("inspect_object_id", [objectId], this.state.paused ? this.state.stopId : 0n).then((message) => {
-			this.session.acceptInspection(objectId, message.payload);
-		}).catch((error) => log.warn(error.message));
+		void this.inspect_object(objectId).catch((error) => log.warn(error.message));
+	}
+
+	public async inspect_object(objectId: bigint) {
+		const message = await this.requestData("inspect_object_id", [objectId], this.state.paused ? this.state.stopId : 0n);
+		if (message.payload.length < 3) throw new Error("The remote object no longer exists.");
+		return this.session.acceptInspection(objectId, message.payload);
 	}
 
 	public request_scene_tree() {

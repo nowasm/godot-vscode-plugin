@@ -195,6 +195,7 @@ export class GodotDebugSession extends LoggingDebugSession {
 		build_sub_values(variable);
 		this.inspect_callbacks.get(id)?.(className, variable);
 		this.inspect_callbacks.delete(id);
+		return { className, variable };
 	}
 
 	private fail(response: DebugProtocol.Response, error: unknown) {

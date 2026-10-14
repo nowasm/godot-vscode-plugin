@@ -6,6 +6,7 @@
 	const search = document.getElementById('search');
 	const saved = vscode.getState() || {};
 	const expanded = new Set(saved.expanded || []);
+	const requested = new Set();
 	let initialized = saved.initialized || false;
 	let rootIds = saved.rootIds || '';
 	let snapshot = { rows: [], connected: false };
@@ -55,6 +56,7 @@
 			el.setAttribute('role', 'treeitem');
 			el.setAttribute('aria-level', String(depth + 1));
 			el.setAttribute('aria-selected', String(selected));
+			if (row.loadState === 'loading') el.setAttribute('aria-busy', 'true');
 			el.tabIndex = row.id === focusedId ? 0 : -1;
 			el.title = [row.path, row.label, row.description, row.hidden ? 'Hidden in the running scene' : ''].filter(Boolean).join('\n');
 			const indent = element('span', 'indent');
@@ -87,6 +89,11 @@
 			visibleRows.push({ row, el, parent });
 			fragment.append(el);
 			if (open) row.children.forEach(child => append(child, depth + 1, row));
+			// Restore explicitly expanded objects after refreshing the selected node.
+			if (open && expanded.has(row.id) && row.loadState === 'unloaded' && !requested.has(row.id)) {
+				requested.add(row.id);
+				send('expand', row.id);
+			}
 		}
 		snapshot.rows.forEach(row => append(row, 0));
 		tree.replaceChildren(fragment);
@@ -106,7 +113,11 @@
 	function count(rows) { return rows.reduce((total, row) => total + 1 + count(row.children), 0); }
 	function toggle(row) {
 		if (!row.children.length) return;
-		if (expanded.has(row.id)) expanded.delete(row.id); else expanded.add(row.id);
+		if (expanded.has(row.id)) expanded.delete(row.id);
+		else {
+			expanded.add(row.id);
+			if (row.loadState === 'error') send('expand', row.id);
+		}
 		focusedId = row.id;
 		render();
 	}
@@ -146,6 +157,7 @@
 	tree.addEventListener('scroll', persist, { passive: true });
 	window.addEventListener('message', event => {
 		if (event.data?.type !== 'snapshot' || event.data.kind !== kind) return;
+		if (event.data.revision !== snapshot.revision) requested.clear();
 		snapshot = event.data;
 		const nextRootIds = snapshot.rows.map(row => row.id).join('|');
 		if (nextRootIds !== rootIds) {

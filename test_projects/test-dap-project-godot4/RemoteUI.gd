@@ -2,6 +2,14 @@ extends Control
 
 @export var show_dynamic_child := false
 var dynamic_child: Label
+var object_refs: Array
+var object_dictionary: Dictionary
+
+func _ready() -> void:
+	var resource := Resource.new()
+	resource.resource_name = "Inspectable resource"
+	object_refs = [$Panel/VBox/PlayButton, self, resource]
+	object_dictionary = {"button": $Panel/VBox/PlayButton}
 
 func _process(_delta: float) -> void:
 	if show_dynamic_child and not is_instance_valid(dynamic_child):
