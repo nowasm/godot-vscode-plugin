@@ -6,6 +6,7 @@
 !resources/
 !resources/**
 !media/
+!media/remote-inspector/**
 !configurations/
 !package.json
 !package.nls.json

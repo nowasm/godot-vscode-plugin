@@ -29,6 +29,7 @@ import { GodotDebugSessionV2 as Godot4DebugSessionV2 } from "./godot4/debug_sess
 import { GodotObject } from "./godot4/variables/godot_object_promise";
 import { InspectorProvider, RemoteProperty } from "./inspector_provider";
 import { SceneNode, SceneTreeProvider } from "./scene_tree_provider";
+import { InspectorColumns } from "./inspector_columns";
 
 const log = createLogger("debugger", { output: "Godot Debugger" });
 
@@ -86,6 +87,14 @@ export class GodotDebugger implements DebugAdapterDescriptorFactory, DebugConfig
 	public session?: Godot3DebugSession | Godot4DebugSession | Godot4DebugSessionV2;
 	public sceneTree = new SceneTreeProvider();
 	public inspector = new InspectorProvider();
+	public inspectorColumns = new InspectorColumns(this.sceneTree, this.inspector, {
+		inspect: (node) => this.inspect_node(node),
+		edit: (property) => this.edit_value(property),
+		filter: (query) => this.set_scene_tree_filter(query),
+		refreshScene: () => this.refresh_scene_tree(),
+		refreshInspector: () => this.refresh_inspector(),
+		highlight: (enabled) => this.set_node_highlight(enabled),
+	});
 
 	fileDecorations = new GDFileDecorationProvider();
 	private sceneTreeRefreshTimer?: NodeJS.Timeout;
@@ -107,6 +116,8 @@ export class GodotDebugger implements DebugAdapterDescriptorFactory, DebugConfig
 			register_command("debugger.inspectNode", this.inspect_node.bind(this)),
 			register_command("debugger.refreshSceneTree", this.refresh_scene_tree.bind(this)),
 			register_command("debugger.refreshInspector", this.refresh_inspector.bind(this)),
+			register_command("debugger.openInspectorColumns", () => this.inspectorColumns.open()),
+			register_command("debugger.closeInspectorColumns", () => this.inspectorColumns.close()),
 			register_command("debugger.filterSceneTree", this.filter_scene_tree.bind(this)),
 			register_command("debugger.clearSceneTreeFilter", () => this.set_scene_tree_filter("")),
 			register_command("debugger.enableNodeHighlight", () => this.set_node_highlight(true)),
@@ -123,10 +134,27 @@ export class GodotDebugger implements DebugAdapterDescriptorFactory, DebugConfig
 			register_command("debugger.openPinnedFile", this.open_pinned_file.bind(this)),
 			this.inspector.view,
 			this.sceneTree,
+			this.inspectorColumns,
+			this.inspectorColumns.onDidChangeVisibility(() => {
+				if (this.inspectorColumns.sceneVisible) this.refresh_scene_tree();
+			}),
+			debug.onDidStartDebugSession((session) => {
+				if (session.id !== this.activeSessionId) return;
+				this.inspectorColumns.setConnected(true);
+				if (get_configuration("debugger.openInspectorColumnsOnStart", true)) {
+					void this.inspectorColumns
+						.open()
+						.catch((error) => log.warn("Unable to open inspector columns", error));
+				}
+			}),
 			this.sceneTree.view.onDidChangeVisibility(() => {
 				if (this.sceneTree.view.visible) this.refresh_scene_tree();
 			}),
 			this.sceneTree.onDidUpdateTree(() => {
+				this.inspectorColumns.setHighlight(
+					this.session instanceof Godot4DebugSession && this.session.controller.supports_node_highlight,
+					this.highlightEnabled,
+				);
 				set_context(
 					"debugger.canHighlight",
 					this.session instanceof Godot4DebugSession && this.session.controller.supports_node_highlight,
@@ -153,6 +181,9 @@ export class GodotDebugger implements DebugAdapterDescriptorFactory, DebugConfig
 				this.inspectionGeneration++;
 				this.sceneTree.clear();
 				this.inspector.clear();
+				this.inspectorColumns.select();
+				this.inspectorColumns.setConnected(false);
+				this.inspectorColumns.setHighlight(false, this.highlightEnabled);
 				set_context("debugger.canHighlight", false);
 			}),
 			{ dispose: () => this.stop_scene_tree_refresh() },
@@ -179,6 +210,7 @@ export class GodotDebugger implements DebugAdapterDescriptorFactory, DebugConfig
 
 		this.sceneTree.clear();
 		this.inspector.clear();
+		this.inspectorColumns.select();
 		this.selectedNodeId = undefined;
 		this.inspectionGeneration++;
 		this.activeSessionId = session.id;
@@ -342,6 +374,7 @@ export class GodotDebugger implements DebugAdapterDescriptorFactory, DebugConfig
 		if (!element || !this.session?.controller.is_connected) return;
 		if (element instanceof SceneNode) {
 			this.selectedNodeId = element.object_id;
+			this.inspectorColumns.select(element);
 			this.update_node_highlight();
 		}
 		await this.fill_inspector(element);
@@ -399,7 +432,11 @@ export class GodotDebugger implements DebugAdapterDescriptorFactory, DebugConfig
 		if (interval <= 0) return;
 		this.sceneTreeRefreshTimer = setInterval(
 			() => {
-				if (this.sceneTree.view.visible && this.session?.controller.is_connected) this.refresh_scene_tree();
+				if (
+					(this.sceneTree.view.visible || this.inspectorColumns.sceneVisible) &&
+					this.session?.controller.is_connected
+				)
+					this.refresh_scene_tree();
 			},
 			Math.max(250, interval),
 		);
@@ -427,12 +464,17 @@ export class GodotDebugger implements DebugAdapterDescriptorFactory, DebugConfig
 
 	public set_node_highlight(enabled: boolean) {
 		this.highlightEnabled = enabled;
+		this.inspectorColumns.setHighlight(
+			this.session instanceof Godot4DebugSession && this.session.controller.supports_node_highlight,
+			enabled,
+		);
 		set_context("debugger.highlightEnabled", enabled);
 		this.update_node_highlight();
 	}
 
 	public clear_node_highlight() {
 		this.selectedNodeId = undefined;
+		this.inspectorColumns.select();
 		this.update_node_highlight();
 	}
 

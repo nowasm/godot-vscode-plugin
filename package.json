@@ -2,7 +2,7 @@
 	"name": "godparty-godot-tools",
 	"displayName": "GodParty Godot Tools",
 	"icon": "icon.png",
-	"version": "0.1.5",
+	"version": "0.1.6",
 	"description": "Tools for game development with Godot Engine and GDScript",
 	"repository": {
 		"type": "git",
@@ -67,6 +67,17 @@
 			}
 		],
 		"commands": [
+			{
+				"category": "Godot Tools",
+				"command": "godotTools.debugger.openInspectorColumns",
+				"title": "Open Scene Tree and Inspector Columns",
+				"icon": "$(layout)"
+			},
+			{
+				"category": "Godot Tools",
+				"command": "godotTools.debugger.closeInspectorColumns",
+				"title": "Close Scene Tree and Inspector Columns"
+			},
 			{
 				"category": "Godot Tools",
 				"command": "godotTools.debugger.filterSceneTree",
@@ -486,6 +497,11 @@
 					"minimum": 0,
 					"description": "Refresh interval in milliseconds for the visible Remote Scene Tree. Set to 0 to refresh manually. Intervals below 250 ms are limited to 250 ms."
 				},
+				"godotTools.debugger.openInspectorColumnsOnStart": {
+					"type": "boolean",
+					"default": true,
+					"description": "Open full-height Scene Tree and Inspector editor columns between the debug sidebar and source editors when a Godot debug session starts."
+				},
 				"godotTools.debugger.highlightSelectedNode": {
 					"type": "boolean",
 					"default": true,
@@ -791,11 +807,13 @@
 				{
 					"id": "godotTools.activeSceneTree",
 					"name": "Remote Scene Tree",
+					"when": "!godotTools.context.debugger.sceneColumnOpen",
 					"icon": "resources/godot_icon.svg"
 				},
 				{
 					"id": "godotTools.nodeInspector",
 					"name": "Inspector",
+					"when": "!godotTools.context.debugger.propertiesColumnOpen",
 					"icon": "resources/godot_icon.svg"
 				}
 			],
@@ -885,6 +903,11 @@
 				}
 			],
 			"view/title": [
+				{
+					"command": "godotTools.debugger.openInspectorColumns",
+					"when": "view == godotTools.activeSceneTree || view == godotTools.nodeInspector",
+					"group": "navigation@0"
+				},
 				{
 					"command": "godotTools.debugger.filterSceneTree",
 					"when": "view == godotTools.activeSceneTree",

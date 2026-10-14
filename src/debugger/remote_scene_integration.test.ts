@@ -58,6 +58,9 @@ suite("Remote UI integration - Godot 4", () => {
 			}),
 		);
 		await wait_until(() => nodes().some((node) => node.label === "PlayButton"), "initial runtime UI tree");
+		await wait_until(() => dbg.inspectorColumns.sceneVisible, "automatic inspector columns");
+		await vscode.commands.executeCommand("workbench.view.explorer");
+		await wait_until(() => !dbg.sceneTree.view.visible, "hidden debug sidebar tree");
 		assert(dbg.session instanceof Godot4Session);
 		assert.equal(dbg.session.variables_manager, undefined, "game should be running, without a breakpoint");
 		const button = find_node("PlayButton");
@@ -128,6 +131,7 @@ suite("Remote UI integration - Godot 3 project", () => {
 			await wait_until(() => dbg.inspector.get_top_item()?.label === ui.label, "click-to-inspect while running");
 			assert.equal(dbg.inspector.get_top_item()?.description, ui.class_name);
 			assert.equal(dbg.session.debug_data.last_frames.length, 0);
+			assert(dbg.inspectorColumns.sceneVisible, "Godot 3 should also open the full-height columns");
 			console.log(`Godot 3 VS Code session: ${nodes().length} runtime nodes; inspected ${ui.node_path}`);
 		} finally {
 			if (vscode.debug.activeDebugSession) await vscode.debug.stopDebugging();

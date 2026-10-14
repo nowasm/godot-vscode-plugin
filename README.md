@@ -182,9 +182,13 @@ To configure the GDScript debugger:
 
 ### Remote Scene Tree and UI inspection
 
-While a Godot debug session is running, open **Run and Debug → Remote Scene Tree**. The tree loads without requiring a breakpoint and includes dynamically created UI nodes. Click a node to display its properties in **Inspector**, or use its context menu to copy its full runtime node path.
+Starting a Godot debug session opens two independent editor columns: **Godot Scene Tree** and **Godot Inspector**. The layout is **Run and Debug sidebar | Scene Tree | Inspector | Source code**. Drag the dividers to resize the columns, or move their tabs to suit your workspace. The dedicated groups are locked so ordinary source navigation uses the source editors. Existing source tabs and unsaved buffers stay open.
 
-Use the tree's **Search** button to filter by node name, class, or path. Matching branches retain their parent nodes. Clear Search restores the full hierarchy. Node IDs preserve expansion across refreshes; Godot 4 nodes also display their hidden state when the engine supplies visibility information.
+Use **Godot Tools: Open Scene Tree and Inspector Columns** from the Command Palette to open or restore the columns at any time. Each column's close button restores its original **Run and Debug** sidebar view. Set `godotTools.debugger.openInspectorColumnsOnStart` to `false` to keep the sidebar layout by default.
+
+The tree loads without requiring a breakpoint and includes dynamically created UI nodes. Click a node to display its properties in **Godot Inspector**. Use the copy button on a node to copy its runtime path. Filter properties in the Inspector column, and use the pencil beside an editable value (or F2) to change it.
+
+Use the scene column's search field (or the sidebar tree's **Search** button) to filter by node name, class, or path. Matching branches retain their parent nodes. Clearing the field restores the full hierarchy. Node IDs preserve expansion and scroll across refreshes; Godot 4 nodes also display their hidden state when the engine supplies visibility information. Use arrow keys to navigate and expand branches, and Enter to inspect the focused node.
 
 The visible tree refreshes every second. Set `godotTools.debugger.sceneTreeRefreshInterval` to change the interval, or to `0` for manual refresh using the Refresh button.
 

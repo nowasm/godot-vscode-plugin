@@ -1,5 +1,12 @@
 # Changelog
 
+### 0.1.6 — GodParty fork
+
+- Open the runtime scene tree and selected node properties in two independent editor columns between the debug sidebar and source code. Resize or move them like other editor tabs.
+- Open columns automatically with a Godot debug session, or use `Godot Tools: Open Scene Tree and Inspector Columns`. Preserve source tabs and unsaved buffers; reuse columns on subsequent sessions.
+- Keep scene search, node selection, property filtering/editing, path copying, native outlines on supported engines, and automatic refresh available in the columns. Preserve expanded branches and scroll during polling.
+- Hide each original sidebar view while its editor column is open, and restore it when that column is closed. Clear the columns when debugging ends.
+
 ### 0.1.5 — GodParty fork
 
 - Load and automatically refresh the running scene tree without requiring a breakpoint, including Godot 3 protocol v2 projects.
