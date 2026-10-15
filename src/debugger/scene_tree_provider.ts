@@ -10,6 +10,7 @@ import {
 	window,
 } from "vscode";
 import { get_extension_uri } from "../utils";
+import { godot3_has_visibility } from "./node_visibility";
 
 const iconDir = get_extension_uri("resources", "godot_icons").fsPath;
 
@@ -22,6 +23,8 @@ export class SceneTreeProvider implements TreeDataProvider<SceneNode>, Disposabl
 	private root: SceneNode | undefined;
 	private nodes = new Map<string, SceneNode>();
 	private filteredNodes = new Set<SceneNode>();
+	private confirmedVisibility = new Map<string, boolean>();
+	private pendingVisibility = new Set<string>();
 	public filter = "";
 	public view: TreeView<SceneNode>;
 
@@ -43,6 +46,8 @@ export class SceneTreeProvider implements TreeDataProvider<SceneNode>, Disposabl
 
 		this.root = undefined;
 		this.nodes.clear();
+		this.confirmedVisibility.clear();
+		this.pendingVisibility.clear();
 		this.filteredNodes.clear();
 		this.changeTreeEvent.fire();
 	}
@@ -54,15 +59,35 @@ export class SceneTreeProvider implements TreeDataProvider<SceneNode>, Disposabl
 			item.parent = parent;
 			item.node_path = `${parent?.node_path ?? ""}/${item.label}`;
 			this.nodes.set(item.object_id.toString(), item);
+			item.confirmed_visible =
+				item.view_flags === undefined ? this.confirmedVisibility.get(item.object_id.toString()) : undefined;
+			item.visibility_pending = this.pendingVisibility.has(item.object_id.toString());
 			for (const child of item.children) index(child, item);
 		};
 		index(node);
+		for (const id of this.confirmedVisibility.keys()) if (!this.nodes.has(id)) this.confirmedVisibility.delete(id);
 		this.update_filter();
 		this.updateTreeEvent.fire();
 	}
 
 	public find_node(object_id: number | bigint): SceneNode | undefined {
 		return this.nodes.get(object_id.toString());
+	}
+
+	public confirm_visibility(id: number | bigint, visible: boolean) {
+		const node = this.find_node(id);
+		if (!node) return;
+		this.confirmedVisibility.set(id.toString(), visible);
+		node.confirmed_visible = visible;
+		this.changeTreeEvent.fire();
+	}
+
+	public set_visibility_pending(id: number | bigint, pending: boolean) {
+		if (pending) this.pendingVisibility.add(id.toString());
+		else this.pendingVisibility.delete(id.toString());
+		const node = this.find_node(id);
+		if (node) node.visibility_pending = pending;
+		this.changeTreeEvent.fire();
 	}
 
 	public set_filter(filter: string) {
@@ -113,7 +138,9 @@ export class SceneTreeProvider implements TreeDataProvider<SceneNode>, Disposabl
 		);
 
 		tree_item.id = element.object_id.toString();
-		tree_item.contextValue = "remote_node";
+		tree_item.contextValue = element.can_change_visibility
+			? `remote_node_${element.local_visible === undefined ? "unknown" : element.local_visible ? "visible" : "hidden"}`
+			: "remote_node";
 		tree_item.command = {
 			command: "godotTools.debugger.inspectNode",
 			title: "Inspect Remote Node",
@@ -126,6 +153,9 @@ export class SceneTreeProvider implements TreeDataProvider<SceneNode>, Disposabl
 			element.class_name,
 			`Object ID: ${element.object_id}`,
 			element.is_hidden ? "Hidden in the running scene" : undefined,
+			element.can_change_visibility && element.local_visible === undefined
+				? "Visibility is read on demand"
+				: undefined,
 			element.scene_file_path,
 		]
 			.filter(Boolean)
@@ -138,9 +168,25 @@ export class SceneTreeProvider implements TreeDataProvider<SceneNode>, Disposabl
 export class SceneNode extends TreeItem {
 	public parent?: SceneNode;
 	public node_path = "";
+	public confirmed_visible?: boolean;
+	public visibility_pending = false;
+
+	public get can_change_visibility(): boolean {
+		if (!this.parent || ["Viewport", "SubViewport"].includes(this.class_name)) return false;
+		return this.view_flags !== undefined ? (this.view_flags & 2) !== 0 : godot3_has_visibility(this.class_name);
+	}
+
+	public get local_visible(): boolean | undefined {
+		return (
+			this.confirmed_visible ??
+			(this.view_flags !== undefined && (this.view_flags & 2) !== 0 ? (this.view_flags & 4) !== 0 : undefined)
+		);
+	}
 
 	public get is_hidden(): boolean {
-		return this.view_flags !== undefined && (this.view_flags & 2) !== 0 && (this.view_flags & 8) === 0;
+		return this.view_flags !== undefined
+			? (this.view_flags & 2) !== 0 && (this.view_flags & 8) === 0
+			: this.confirmed_visible === false;
 	}
 
 	constructor(

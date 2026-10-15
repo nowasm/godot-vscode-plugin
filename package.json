@@ -2,7 +2,7 @@
 	"name": "godparty-godot-tools",
 	"displayName": "GodParty Godot Tools",
 	"icon": "icon.png",
-	"version": "0.1.8",
+	"version": "0.1.9",
 	"description": "Tools for game development with Godot Engine and GDScript",
 	"repository": {
 		"type": "git",
@@ -67,6 +67,31 @@
 			}
 		],
 		"commands": [
+			{
+				"category": "Godot Tools",
+				"command": "godotTools.debugger.toggleInspectorColumns",
+				"title": "Toggle Scene Tree and Inspector Columns",
+				"icon": "$(layout-sidebar-right)",
+				"toggled": "godotTools.context.debugger.inspectorColumnsOpen"
+			},
+			{
+				"category": "Godot Tools",
+				"command": "godotTools.debugger.toggleNodeVisibility",
+				"title": "Toggle Node Visibility",
+				"icon": "$(eye)"
+			},
+			{
+				"category": "Godot Tools",
+				"command": "godotTools.debugger.showNode",
+				"title": "Show Node",
+				"icon": "$(eye)"
+			},
+			{
+				"category": "Godot Tools",
+				"command": "godotTools.debugger.hideNode",
+				"title": "Hide Node",
+				"icon": "$(eye-closed)"
+			},
 			{
 				"category": "Godot Tools",
 				"command": "godotTools.debugger.openInspectorColumns",
@@ -142,10 +167,7 @@
 				"category": "Godot Tools",
 				"command": "godotTools.debugger.inspectNode",
 				"title": "Inspect Remote Node",
-				"icon": {
-					"light": "resources/godot_icons/light/GuiVisibilityVisible.svg",
-					"dark": "resources/godot_icons/dark/GuiVisibilityVisible.svg"
-				}
+				"icon": "$(inspect)"
 			},
 			{
 				"category": "Godot Tools",
@@ -499,8 +521,8 @@
 				},
 				"godotTools.debugger.openInspectorColumnsOnStart": {
 					"type": "boolean",
-					"default": true,
-					"description": "Open full-height Scene Tree and Inspector editor columns between the debug sidebar and source editors when a Godot debug session starts."
+					"default": false,
+					"description": "Initial preference for opening Scene Tree and Inspector columns with a Godot debug session. The toolbar/status-bar toggle remembers the last choice for each workspace. Changing this setting resets that choice."
 				},
 				"godotTools.debugger.highlightSelectedNode": {
 					"type": "boolean",
@@ -842,6 +864,18 @@
 		"menus": {
 			"commandPalette": [
 				{
+					"command": "godotTools.debugger.toggleNodeVisibility",
+					"when": "false"
+				},
+				{
+					"command": "godotTools.debugger.showNode",
+					"when": "false"
+				},
+				{
+					"command": "godotTools.debugger.hideNode",
+					"when": "false"
+				},
+				{
 					"command": "godotTools.debugger.copyRemoteNodePath",
 					"when": "false"
 				},
@@ -969,7 +1003,29 @@
 					"group": "navigation@4"
 				}
 			],
+			"debug/toolBar": [
+				{
+					"command": "godotTools.debugger.toggleInspectorColumns",
+					"when": "debugType == godot",
+					"group": "navigation@50"
+				}
+			],
 			"view/item/context": [
+				{
+					"command": "godotTools.debugger.toggleNodeVisibility",
+					"when": "view == godotTools.activeSceneTree && viewItem =~ /^remote_node_(visible|hidden|unknown)$/",
+					"group": "inline@0"
+				},
+				{
+					"command": "godotTools.debugger.showNode",
+					"when": "view == godotTools.activeSceneTree && viewItem =~ /^remote_node_(visible|hidden|unknown)$/",
+					"group": "1_visibility@1"
+				},
+				{
+					"command": "godotTools.debugger.hideNode",
+					"when": "view == godotTools.activeSceneTree && viewItem =~ /^remote_node_(visible|hidden|unknown)$/",
+					"group": "1_visibility@2"
+				},
 				{
 					"command": "godotTools.debugger.copyRemoteNodePath",
 					"when": "view == godotTools.activeSceneTree",

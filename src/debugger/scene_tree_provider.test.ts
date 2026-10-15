@@ -70,7 +70,39 @@ suite("Remote scene tree", () => {
 		const node = new SceneNode("HiddenUI", "Control", 5, [], undefined, 6);
 		provider.fill_tree(node);
 		assert.equal(node.is_hidden, true);
+		assert.equal(node.local_visible, true, "the eye must use local visibility, not inherited visibility");
 		assert.match(provider.getTreeItem(node).description as string, /hidden/);
 		assert.equal(new SceneNode("Godot3", "Control", 6, []).is_hidden, false);
+	});
+
+	test("offers Godot 3 visibility only for native classes with a boolean visible property", () => {
+		const nodes = ["Button", "Label", "Node2D", "MeshInstance", "CanvasLayer", "Node", "Viewport"].map(
+			(name, index) => new SceneNode(name, name, index + 2, []),
+		);
+		const root = new SceneNode("root", "Viewport", 1, nodes);
+		provider.fill_tree(root);
+		assert.deepEqual(
+			nodes.map((node) => node.can_change_visibility),
+			[true, true, true, true, true, false, false],
+		);
+		assert.equal(root.can_change_visibility, false);
+		assert.equal(nodes[0].local_visible, undefined);
+		assert.equal(provider.getTreeItem(nodes[0]).contextValue, "remote_node_unknown");
+		provider.confirm_visibility(2, false);
+		assert.equal(nodes[0].local_visible, false);
+		assert.equal(nodes[0].is_hidden, true);
+		provider.fill_tree(new SceneNode("root", "Viewport", 1, [new SceneNode("Button", "Button", 2, [])]));
+		assert.equal(provider.find_node(2)?.local_visible, false, "confirmed Godot 3 state survives snapshots");
+		provider.clear();
+		provider.fill_tree(root);
+		assert.equal(nodes[0].local_visible, undefined, "a new session must not inherit visibility");
+	});
+
+	test("refreshes Godot 4 flags rather than keeping a stale confirmed value", () => {
+		const { button } = fixture();
+		provider.confirm_visibility(button.object_id, false);
+		assert.equal(button.local_visible, false);
+		fixture();
+		assert.equal(provider.find_node(button.object_id)?.local_visible, true);
 	});
 });

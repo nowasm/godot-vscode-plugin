@@ -182,11 +182,13 @@ To configure the GDScript debugger:
 
 ### Remote Scene Tree and UI inspection
 
-Starting a Godot debug session opens two independent editor columns: **Godot Scene Tree** and **Godot Inspector**. The layout is **Run and Debug sidebar | Scene Tree | Inspector | Source code**. Drag the dividers to resize the columns, or move their tabs to suit your workspace. The dedicated groups are locked so ordinary source navigation uses the source editors. Existing source tabs and unsaved buffers stay open.
+Click **Godot UI: Off/On** in the status bar, or the layout button in the Godot debug toolbar, to show or hide two independent editor columns: **Godot Scene Tree** and **Godot Inspector**. The layout is **Run and Debug sidebar | Scene Tree | Inspector | Source code**. Drag the dividers to resize the columns, or move their tabs to suit your workspace. The dedicated groups are locked so ordinary source navigation uses the source editors. Existing source tabs and unsaved buffers stay open.
 
-Use **Godot Tools: Open Scene Tree and Inspector Columns** from the Command Palette to open or restore the columns at any time. Each column's close button restores its original **Run and Debug** sidebar view. Set `godotTools.debugger.openInspectorColumnsOnStart` to `false` to keep the sidebar layout by default.
+The columns start off by default. Their toggle remembers the last choice for the current workspace, including the next debug session. Each column's **Hide both Godot columns** button closes both and returns their space to the source editor; closing a tab restores its original sidebar view. The Command Palette also offers **Godot Tools: Toggle Scene Tree and Inspector Columns** and explicit Open/Close commands. Changing `godotTools.debugger.openInspectorColumnsOnStart` resets the remembered preference to the chosen value.
 
 The tree loads without requiring a breakpoint and includes dynamically created UI nodes. Click a node to display its properties in **Godot Inspector**. Use the copy button on a node to copy its runtime path. Filter properties in the Inspector column, and use the pencil beside an editable value (or F2) to change it.
+
+Use the **eye** beside a drawable node to hide or show that runtime instance. The sidebar also offers **Show Node** and **Hide Node** in its context menu. The action changes the node's own `visible` value; a child under a hidden parent stays hidden until its parent is shown. Ordinary Nodes and root viewports have no visibility control. Godot 4 reports live local/inherited visibility in tree snapshots. Godot 3 reads the real value when inspecting or toggling a node and displays the last confirmed local state, since its tree protocol has no visibility flags. The action preserves selection and does not edit scene files; changes reset with the next game launch.
 
 Expand an **Object** value to load its detailed properties in place, including references inside arrays and dictionaries. Nested objects load only when expanded; the selected scene node and outline stay intact. The ↗ action opens an object as the Inspector root. Circular paths display an ancestor reference, and unavailable objects display an error in their branch; close and reopen the branch to retry. Refresh reloads expanded objects while preserving their expansion and scroll. Property filtering searches the data already loaded. Available with Godot 3 protocol v2, standard Godot 4, and Godot 4 protocol v2, in both the editor column and sidebar Inspector.
 
@@ -245,7 +247,7 @@ _Usage_
 
 - Stacktrace and variable dumps are the same as any regular debugger
 - The active scene tree can be refreshed with the Refresh icon in the top right.
-- Nodes can be brought to the fore in the Inspector by clicking the Eye icon next to nodes in the active scene tree, or Objects in the inspector.
+- Nodes can be brought to the fore in the Inspector with the Inspect action next to nodes in the active scene tree, or Objects in the inspector. The Eye action controls a node's visibility in the running game.
 - You can edit integers, floats, strings, and booleans within the inspector by clicking the pencil icon next to each.
 
 ![Showing the debugger in action](img/godot-debug.png)

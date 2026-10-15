@@ -26,8 +26,8 @@ suite("Inspector editor columns", () => {
 		await vscode.extensions.getExtension("godparty.godparty-godot-tools")?.activate();
 		assert(globals.debug);
 	});
-	teardown(() => {
-		globals.debug?.inspectorColumns.close();
+	teardown(async () => {
+		await globals.debug?.set_inspector_columns_enabled(false);
 		globals.debug?.sceneTree.clear();
 		globals.debug?.set_scene_tree_filter("");
 		globals.debug?.inspector.clear();
@@ -37,7 +37,7 @@ suite("Inspector editor columns", () => {
 		this.timeout(15000);
 		const dbg = globals.debug;
 		assert(dbg);
-		dbg.inspectorColumns.close();
+		await dbg.inspectorColumns.close();
 		await until(() => !column("remoteSceneColumn") && !column("nodePropertiesColumn"));
 		const doc = await vscode.workspace.openTextDocument({
 			content: "# unsaved source buffer",
@@ -79,6 +79,79 @@ suite("Inspector editor columns", () => {
 		);
 		const sourceEditor = await vscode.window.showTextDocument(anotherSource);
 		assert.equal(sourceEditor.viewColumn, 3, "source navigation must avoid the inspector groups");
+	});
+
+	test("toggles both columns, remembers the choice, and reclaims empty groups without closing dirty source", async function () {
+		this.timeout(15000);
+		const dbg = globals.debug;
+		assert(dbg);
+		await dbg.set_inspector_columns_enabled(false);
+		const config = vscode.workspace.getConfiguration("workbench.editor");
+		const previous = config.inspect<boolean>("closeEmptyGroups")?.globalValue;
+		await config.update("closeEmptyGroups", false, vscode.ConfigurationTarget.Global);
+		const doc = await vscode.workspace.openTextDocument({
+			content: "# preserved dirty source",
+			language: "gdscript",
+		});
+		try {
+			await vscode.window.showTextDocument(doc);
+			const before = vscode.window.tabGroups.all.length;
+			await vscode.commands.executeCommand("godotTools.debugger.toggleInspectorColumns");
+			assert(dbg.inspectorColumns.isOpen);
+			assert(dbg.inspector_columns_enabled);
+			await until(() => !!column("remoteSceneColumn") && !!column("nodePropertiesColumn"));
+			await vscode.commands.executeCommand("godotTools.debugger.toggleInspectorColumns");
+			assert.equal(dbg.inspectorColumns.isOpen, false);
+			assert.equal(dbg.inspector_columns_enabled, false);
+			await until(() => vscode.window.tabGroups.all.length === before);
+			assert(doc.isDirty);
+			assert.equal(doc.getText(), "# preserved dirty source");
+			await Promise.all([dbg.toggle_inspector_columns(), dbg.toggle_inspector_columns()]);
+			assert.equal(dbg.inspectorColumns.isOpen, false, "rapid toggles must be serialized");
+			assert.equal(dbg.inspector_columns_enabled, false);
+		} finally {
+			await dbg.set_inspector_columns_enabled(false);
+			await config.update("closeEmptyGroups", previous, vscode.ConfigurationTarget.Global);
+			await vscode.window.showTextDocument(doc);
+			await vscode.commands.executeCommand("workbench.action.revertAndCloseActiveEditor");
+		}
+	});
+
+	test("validates visibility messages and never treats them as node selection", async () => {
+		const dbg = globals.debug;
+		assert(dbg);
+		const changed: string[] = [];
+		const panels = new InspectorColumns(dbg.sceneTree, dbg.inspector, {
+			inspect: async () => {
+				throw new Error("Visibility must not select a node");
+			},
+			edit: async () => {},
+			filter: () => {},
+			refreshScene: () => {},
+			refreshInspector: async () => {},
+			visibility: async (node, visible) => {
+				changed.push(`${node.object_id}:${visible}`);
+			},
+		});
+		try {
+			const button = new SceneNode("Button", "Button", 2n, [], undefined, 14);
+			dbg.sceneTree.fill_tree(
+				new SceneNode("root", "Viewport", 1n, [button, new SceneNode("Plain", "Node", 3n, [])]),
+			);
+			const row = panels.sceneRows()[0].children[0];
+			assert(row.canChangeVisibility);
+			assert.equal(row.visible, true);
+			await panels.receive("scene", { type: "visibility", id: "2", visible: false });
+			await panels.receive("scene", { type: "visibility", id: "2" });
+			await panels.receive("scene", { type: "visibility", id: "2", visible: "false" });
+			await panels.receive("scene", { type: "visibility", id: "1" });
+			await panels.receive("scene", { type: "visibility", id: "3" });
+			dbg.sceneTree.clear();
+			await panels.receive("scene", { type: "visibility", id: "2" });
+			assert.deepEqual(changed, ["2:false", "2:undefined"]);
+		} finally {
+			panels.dispose();
+		}
 	});
 
 	test("shares filtered scene data, validates selected IDs and rejects removed nodes", async () => {

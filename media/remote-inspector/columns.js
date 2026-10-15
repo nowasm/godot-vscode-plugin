@@ -29,6 +29,23 @@
 		button.addEventListener('click', event => { event.stopPropagation(); callback(); });
 		return button;
 	}
+	function visibilityAction(row) {
+		const title = row.visible === undefined ? 'Toggle visibility (read from running game)' : row.visible ? 'Hide node' : 'Show node';
+		const button = action('', title, () => vscode.postMessage({ type: 'visibility', id: row.id }));
+		button.classList.add('visibility');
+		button.disabled = !!row.visibilityPending;
+		if (row.visible !== undefined) button.setAttribute('aria-pressed', String(row.visible));
+		if (row.visibilityPending) button.setAttribute('aria-busy', 'true');
+		const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+		svg.setAttribute('viewBox', '0 0 16 16');
+		svg.setAttribute('aria-hidden', 'true');
+		const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+		path.setAttribute('d', row.visible === false
+			? 'M2 2l12 12M6 4.3A7.5 7.5 0 0 1 8 4c3.8 0 6.5 4 6.5 4a13 13 0 0 1-2 2.3M10 11.7A7.5 7.5 0 0 1 8 12C4.2 12 1.5 8 1.5 8a13 13 0 0 1 2-2.3'
+			: 'M1.5 8S4.2 4 8 4s6.5 4 6.5 4-2.7 4-6.5 4-6.5-4-6.5-4ZM10 8a2 2 0 1 1-4 0 2 2 0 0 1 4 0Z');
+		svg.append(path); button.append(svg);
+		return button;
+	}
 	function render() {
 		const scroll = tree.scrollTop;
 		const focused = tree.contains(document.activeElement);
@@ -78,6 +95,7 @@
 			}
 			el.append(element('span', 'label', row.label), element('span', 'description', row.description + (row.hidden ? ' · hidden' : '')));
 			if (kind === 'scene') el.append(action('⧉', 'Copy node path', () => send('copyPath', row.id)));
+			if (kind === 'scene' && row.canChangeVisibility) el.append(visibilityAction(row));
 			if (row.editable) el.append(action('✎', 'Edit value', () => send('edit', row.id)));
 			if (row.inspectable) el.append(action('↗', 'Inspect object', () => send('inspect', row.id)));
 			el.addEventListener('click', () => {
@@ -153,6 +171,7 @@
 	});
 	document.getElementById('refresh').addEventListener('click', () => send('refresh'));
 	document.getElementById('collapse').addEventListener('click', () => { expanded.clear(); render(); });
+	document.getElementById('close-columns').addEventListener('click', () => send('close'));
 	document.getElementById('highlight').addEventListener('click', () => vscode.postMessage({ type: 'highlight', enabled: !snapshot.highlightEnabled }));
 	tree.addEventListener('scroll', persist, { passive: true });
 	window.addEventListener('message', event => {

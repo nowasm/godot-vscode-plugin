@@ -16,7 +16,10 @@ func _ready():
 	temporary = Label.new()
 	temporary.name = "TemporaryLabel"
 	temporary.text = "Expand me before removal"
-	add_child(temporary)
+	var canvas = Control.new()
+	canvas.name = "Canvas"
+	add_child(canvas)
+	canvas.add_child(temporary)
 	object_refs = [details, details, self, temporary]
 	object_dictionary = {"details": details}
 

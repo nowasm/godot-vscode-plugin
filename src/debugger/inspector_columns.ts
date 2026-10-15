@@ -5,6 +5,8 @@ import {
 	env,
 	EventEmitter,
 	TabInputText,
+	TabInputWebview,
+	Tab,
 	Uri,
 	ViewColumn,
 	Webview,
@@ -24,6 +26,8 @@ export interface InspectorColumnActions {
 	refreshScene(): void;
 	refreshInspector(): Promise<void>;
 	highlight?(enabled: boolean): void;
+	visibility?(node: SceneNode, visible?: boolean): Promise<void>;
+	close?(): Promise<void>;
 }
 
 export interface ColumnRow {
@@ -32,6 +36,9 @@ export interface ColumnRow {
 	description: string;
 	path?: string;
 	hidden?: boolean;
+	canChangeVisibility?: boolean;
+	visible?: boolean;
+	visibilityPending?: boolean;
 	icon?: string;
 	editable?: boolean;
 	inspectable?: boolean;
@@ -49,6 +56,7 @@ export class InspectorColumns implements Disposable {
 	private connected = false;
 	private canHighlight = false;
 	private highlightEnabled = true;
+	private disposed = false;
 	private visibilityEvent = new EventEmitter<void>();
 	public onDidChangeVisibility = this.visibilityEvent.event;
 
@@ -67,6 +75,10 @@ export class InspectorColumns implements Disposable {
 
 	public get sceneVisible() {
 		return this.panels.get("scene")?.visible === true;
+	}
+
+	public get isOpen() {
+		return this.panels.size > 0;
 	}
 
 	public open(): Promise<void> {
@@ -156,6 +168,7 @@ export class InspectorColumns implements Disposable {
 				});
 			}),
 			panel.onDidChangeViewState(() => {
+				if (this.disposed) return;
 				this.update(kind);
 				this.visibilityEvent.fire();
 			}),
@@ -163,7 +176,7 @@ export class InspectorColumns implements Disposable {
 				this.panels.delete(kind);
 				for (const subscription of subscriptions) subscription.dispose();
 				set_context(`debugger.${kind === "scene" ? "scene" : "properties"}ColumnOpen`, false);
-				this.visibilityEvent.fire();
+				if (!this.disposed) this.visibilityEvent.fire();
 			}),
 		];
 		panel.webview.html = this.html(panel.webview, kind);
@@ -195,6 +208,9 @@ export class InspectorColumns implements Disposable {
 			description: node.class_name,
 			path: node.node_path,
 			hidden: node.is_hidden,
+			canChangeVisibility: node.can_change_visibility,
+			visible: node.local_visible,
+			visibilityPending: node.visibility_pending,
 			icon: webview
 				?.asWebviewUri(
 					Uri.joinPath(get_extension_uri("resources", "godot_icons", "dark"), `${node.class_name}.svg`),
@@ -242,13 +258,15 @@ export class InspectorColumns implements Disposable {
 	/** Only opaque IDs from the current model can initiate debugger actions. */
 	public async receive(kind: ColumnKind, message: unknown) {
 		if (!message || typeof message !== "object") return;
-		const { type, id, query, enabled } = message as {
+		const { type, id, query, enabled, visible } = message as {
 			type?: unknown;
 			id?: unknown;
 			query?: unknown;
 			enabled?: unknown;
+			visible?: unknown;
 		};
 		if (type === "ready") this.update(kind);
+		else if (type === "close") await this.actions.close?.();
 		else if (type === "refresh") {
 			if (kind === "scene") this.actions.refreshScene();
 			else await this.actions.refreshInspector();
@@ -261,6 +279,12 @@ export class InspectorColumns implements Disposable {
 				const node = this.scene.find_node(BigInt(id));
 				if (!node) return;
 				if (type === "select") await this.actions.inspect(node);
+				else if (
+					type === "visibility" &&
+					node.can_change_visibility &&
+					(visible === undefined || typeof visible === "boolean")
+				)
+					await this.actions.visibility?.(node, visible);
 				else if (type === "copyPath") await env.clipboard.writeText(node.node_path);
 			} else if (kind === "properties") {
 				this.propertyRows();
@@ -284,7 +308,7 @@ export class InspectorColumns implements Disposable {
 <link rel="stylesheet" href="${asset("columns.css")}"></head>
 <body data-kind="${kind}">
 <header><div class="heading"><span id="title">${kind === "scene" ? "SCENE TREE" : "NODE PROPERTIES"}</span><span id="count"></span>
-<div class="tools"><button id="highlight" hidden title="Toggle selected node outline" aria-label="Toggle selected node outline" aria-pressed="true">◎</button><button id="collapse" title="Collapse all branches" aria-label="Collapse all branches">⊟</button><button id="refresh" title="Refresh" aria-label="Refresh">↻</button></div></div>
+<div class="tools"><button id="highlight" hidden title="Toggle selected node outline" aria-label="Toggle selected node outline" aria-pressed="true">◎</button><button id="collapse" title="Collapse all branches" aria-label="Collapse all branches">⊟</button><button id="refresh" title="Refresh" aria-label="Refresh">↻</button><button id="close-columns" title="Hide both Godot columns" aria-label="Hide both Godot columns">×</button></div></div>
 <div class="search"><input id="search" type="search" placeholder="${kind === "scene" ? "Search name, type or path" : "Filter properties"}" aria-label="${kind === "scene" ? "Search scene tree" : "Filter properties"}"></div>
 <div id="selection" title="Selected node path"></div></header>
 <main id="tree" role="tree" aria-label="${kind === "scene" ? "Runtime scene tree" : "Node properties"}" tabindex="0"></main>
@@ -292,12 +316,31 @@ export class InspectorColumns implements Disposable {
 <script nonce="${nonce}" src="${asset("columns.js")}"></script></body></html>`;
 	}
 
-	public close() {
+	private isColumnTab(tab: Tab): boolean {
+		return (
+			tab.input instanceof TabInputWebview &&
+			["remoteSceneColumn", "nodePropertiesColumn"].some(
+				(kind) => tab.input instanceof TabInputWebview && tab.input.viewType.endsWith(kind),
+			)
+		);
+	}
+
+	public async close() {
+		if (this.opening) await this.opening;
+		// Closing an empty dedicated group must reclaim space even when closeEmptyGroups is disabled.
+		for (let attempt = 0; attempt < 2; attempt++) {
+			const group = window.tabGroups.all.find(
+				(group) => group.tabs.length > 0 && group.tabs.every((tab) => this.isColumnTab(tab)),
+			);
+			if (!group || !(await window.tabGroups.close(group, true))) break;
+		}
+		// A user may have moved source tabs into our groups. Dispose only our panels there.
 		for (const panel of [...this.panels.values()]) panel.dispose();
 	}
 
 	public dispose() {
-		this.close();
+		this.disposed = true;
+		for (const panel of [...this.panels.values()]) panel.dispose();
 		for (const subscription of this.subscriptions) subscription.dispose();
 		this.visibilityEvent.dispose();
 	}

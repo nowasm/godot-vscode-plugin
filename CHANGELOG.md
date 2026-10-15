@@ -1,5 +1,12 @@
 # Changelog
 
+### 0.1.9 — GodParty fork
+
+- Toggle both Inspector editor columns from the debug toolbar, `Godot UI: On/Off` status-bar entry, Command Palette, or either column's close control. Remember the choice per workspace; columns start off unless enabled.
+- Reclaim dedicated editor groups when closing, including with VS Code's automatic empty-group closing disabled. Preserve source tabs, unsaved buffers, selected Inspector data, and the preference across extension disposal.
+- Show/hide runtime nodes with an eye button in the scene tree and Show/Hide actions in the sidebar menu. Support Godot 3 v2, standard Godot 4 and Godot 4 v2 using existing inspection/property APIs, including while Godot 3 is paused.
+- Read the node's real local visibility before toggling and confirm the property write. Keep ancestor visibility and node selection intact; reject unsupported/root nodes and stale sessions. Godot 3 visibility is read on demand rather than fetched for every tree node.
+
 ### 0.1.8 — GodParty fork
 
 - Expand Object references directly in the Inspector to load their real properties, including objects inside arrays and dictionaries, on Godot 3 protocol v2, standard Godot 4 and Godot 4 protocol v2.

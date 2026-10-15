@@ -20,6 +20,7 @@ import {
 	debug,
 	window,
 	workspace,
+	StatusBarAlignment,
 } from "vscode";
 import { createLogger, get_configuration, get_project_version, register_command, set_context } from "../utils";
 import { GodotVariable } from "./debug_runtime";
@@ -27,9 +28,10 @@ import { GodotDebugSession as Godot3DebugSession } from "./godot3/debug_session"
 import { GodotDebugSession as Godot4DebugSession } from "./godot4/debug_session";
 import { GodotDebugSessionV2 as Godot4DebugSessionV2 } from "./godot4/debug_session_v2";
 import { GodotObject } from "./godot4/variables/godot_object_promise";
-import { InspectorProvider, RemoteProperty } from "./inspector_provider";
+import { InspectorProvider, RemoteProperty, InspectedObject } from "./inspector_provider";
 import { SceneNode, SceneTreeProvider } from "./scene_tree_provider";
 import { InspectorColumns } from "./inspector_columns";
+import { object_visibility } from "./node_visibility";
 
 const log = createLogger("debugger", { output: "Godot Debugger" });
 
@@ -94,6 +96,8 @@ export class GodotDebugger implements DebugAdapterDescriptorFactory, DebugConfig
 		refreshScene: () => this.refresh_scene_tree(),
 		refreshInspector: () => this.refresh_inspector(),
 		highlight: (enabled) => this.set_node_highlight(enabled),
+		visibility: (node, visible) => this.set_node_visibility(node, visible),
+		close: () => this.set_inspector_columns_enabled(false),
 	});
 
 	fileDecorations = new GDFileDecorationProvider();
@@ -102,12 +106,20 @@ export class GodotDebugger implements DebugAdapterDescriptorFactory, DebugConfig
 	private selectedNodeId?: number | bigint;
 	private inspectionGeneration = 0;
 	private highlightEnabled = get_configuration("debugger.highlightSelectedNode", true);
+	private columnsStatus = window.createStatusBarItem("godotTools.inspectorColumns", StatusBarAlignment.Right, 90);
+	private columnsChange: Promise<void> = Promise.resolve();
+	private changingColumns = false;
+	private visibilityRequests = new Map<string, Promise<void>>();
 
 	constructor(private context: ExtensionContext) {
 		log.info("Initializing Godot Debugger");
 
 		this.restore_pinned_file();
 		set_context("debugger.highlightEnabled", this.highlightEnabled);
+		this.columnsStatus.name = "Godot Scene Tree and Inspector";
+		this.columnsStatus.command = "godotTools.debugger.toggleInspectorColumns";
+		this.update_columns_status();
+		this.columnsStatus.show();
 
 		context.subscriptions.push(
 			debug.registerDebugConfigurationProvider("godot", this),
@@ -116,8 +128,12 @@ export class GodotDebugger implements DebugAdapterDescriptorFactory, DebugConfig
 			register_command("debugger.inspectNode", this.inspect_node.bind(this)),
 			register_command("debugger.refreshSceneTree", this.refresh_scene_tree.bind(this)),
 			register_command("debugger.refreshInspector", this.refresh_inspector.bind(this)),
-			register_command("debugger.openInspectorColumns", () => this.inspectorColumns.open()),
-			register_command("debugger.closeInspectorColumns", () => this.inspectorColumns.close()),
+			register_command("debugger.openInspectorColumns", () => this.set_inspector_columns_enabled(true)),
+			register_command("debugger.closeInspectorColumns", () => this.set_inspector_columns_enabled(false)),
+			register_command("debugger.toggleInspectorColumns", () => this.toggle_inspector_columns()),
+			register_command("debugger.toggleNodeVisibility", (node: SceneNode) => this.set_node_visibility(node)),
+			register_command("debugger.showNode", (node: SceneNode) => this.set_node_visibility(node, true)),
+			register_command("debugger.hideNode", (node: SceneNode) => this.set_node_visibility(node, false)),
 			register_command("debugger.filterSceneTree", this.filter_scene_tree.bind(this)),
 			register_command("debugger.clearSceneTreeFilter", () => this.set_scene_tree_filter("")),
 			register_command("debugger.enableNodeHighlight", () => this.set_node_highlight(true)),
@@ -135,13 +151,20 @@ export class GodotDebugger implements DebugAdapterDescriptorFactory, DebugConfig
 			this.inspector.view,
 			this.sceneTree,
 			this.inspectorColumns,
+			this.columnsStatus,
 			this.inspectorColumns.onDidChangeVisibility(() => {
+				this.update_columns_status();
+				if (
+					!this.changingColumns &&
+					this.context.workspaceState.get("inspectorColumnsEnabled") !== this.inspectorColumns.isOpen
+				)
+					void this.context.workspaceState.update("inspectorColumnsEnabled", this.inspectorColumns.isOpen);
 				if (this.inspectorColumns.sceneVisible) this.refresh_scene_tree();
 			}),
 			debug.onDidStartDebugSession((session) => {
 				if (session.id !== this.activeSessionId) return;
 				this.inspectorColumns.setConnected(true);
-				if (get_configuration("debugger.openInspectorColumnsOnStart", true)) {
+				if (this.inspector_columns_enabled) {
 					void this.inspectorColumns
 						.open()
 						.catch((error) => log.warn("Unable to open inspector columns", error));
@@ -160,6 +183,10 @@ export class GodotDebugger implements DebugAdapterDescriptorFactory, DebugConfig
 				}
 			}),
 			workspace.onDidChangeConfiguration((event) => {
+				if (event.affectsConfiguration("godotTools.debugger.openInspectorColumnsOnStart"))
+					void this.set_inspector_columns_enabled(
+						get_configuration("debugger.openInspectorColumnsOnStart", false),
+					);
 				if (event.affectsConfiguration("godotTools.debugger.sceneTreeRefreshInterval"))
 					this.start_scene_tree_refresh();
 				if (event.affectsConfiguration("godotTools.debugger.highlightSelectedNode")) {
@@ -173,6 +200,7 @@ export class GodotDebugger implements DebugAdapterDescriptorFactory, DebugConfig
 				this.activeSessionId = undefined;
 				this.selectedNodeId = undefined;
 				this.inspectionGeneration++;
+				this.visibilityRequests.clear();
 				this.sceneTree.clear();
 				this.inspector.clear();
 				this.inspectorColumns.select();
@@ -203,6 +231,7 @@ export class GodotDebugger implements DebugAdapterDescriptorFactory, DebugConfig
 		this.session.inspector = this.inspector;
 
 		this.sceneTree.clear();
+		this.visibilityRequests.clear();
 		this.inspector.clear();
 		this.inspectorColumns.select();
 		this.selectedNodeId = undefined;
@@ -397,11 +426,103 @@ export class GodotDebugger implements DebugAdapterDescriptorFactory, DebugConfig
 	public async inspect_object(id: bigint) {
 		const session = this.session;
 		if (!session?.controller.is_connected) throw new Error("The debug session has ended.");
+		let inspected: InspectedObject;
 		if (session instanceof Godot4DebugSession) {
 			const object = await session.controller.remote_inspector.inspect(id);
-			return { className: object.type, variable: this.create_godot_variable(object) };
+			inspected = { className: object.type, variable: this.create_godot_variable(object) };
+		} else {
+			inspected = await session.controller.inspect_object(id);
 		}
-		return session.controller.inspect_object(id);
+		const visible = object_visibility(inspected.variable);
+		if (session === this.session && visible !== undefined) this.sceneTree.confirm_visibility(id, visible);
+		return inspected;
+	}
+
+	public get inspector_columns_enabled(): boolean {
+		return (
+			this.context.workspaceState.get<boolean>("inspectorColumnsEnabled") ??
+			get_configuration("debugger.openInspectorColumnsOnStart", false)
+		);
+	}
+
+	private update_columns_status() {
+		const open = this.inspectorColumns.isOpen;
+		this.columnsStatus.text = `$(layout-sidebar-right) Godot UI: ${open ? "On" : "Off"}`;
+		this.columnsStatus.tooltip = open
+			? "Hide Scene Tree and Inspector columns"
+			: "Show Scene Tree and Inspector columns";
+		this.columnsStatus.accessibilityInformation = { label: this.columnsStatus.tooltip };
+		set_context("debugger.inspectorColumnsOpen", open);
+	}
+
+	public toggle_inspector_columns(): Promise<void> {
+		return this.change_inspector_columns();
+	}
+
+	public set_inspector_columns_enabled(enabled: boolean): Promise<void> {
+		return this.change_inspector_columns(enabled);
+	}
+
+	private change_inspector_columns(enabled?: boolean): Promise<void> {
+		const operation = this.columnsChange.then(async () => {
+			const show = enabled ?? !this.inspectorColumns.isOpen;
+			this.changingColumns = true;
+			try {
+				if (show) await this.inspectorColumns.open();
+				else await this.inspectorColumns.close();
+				await this.context.workspaceState.update(
+					"inspectorColumnsEnabled",
+					show && this.inspectorColumns.isOpen,
+				);
+				this.update_columns_status();
+			} finally {
+				this.changingColumns = false;
+			}
+		});
+		this.columnsChange = operation.catch(() => {});
+		return operation;
+	}
+
+	/** Read before toggling: a locally visible child may be hidden by its parent. */
+	public set_node_visibility(element: SceneNode, visible?: boolean): Promise<void> {
+		if (!element || !this.sceneTree.find_node(element.object_id)?.can_change_visibility) return Promise.resolve();
+		const session = this.session;
+		if (!session?.controller.is_connected) return Promise.resolve();
+		const id = BigInt(element.object_id);
+		const key = id.toString();
+		const existing = this.visibilityRequests.get(key);
+		if (existing) return existing;
+		const current = () =>
+			session === this.session && session.controller.is_connected && this.sceneTree.find_node(id);
+		this.sceneTree.set_visibility_pending(id, true);
+		const operation = (async () => {
+			const before = await this.inspect_object(id);
+			if (!current()) return;
+			const previous = object_visibility(before.variable);
+			if (previous === undefined) throw new Error("This node does not expose a boolean visible property.");
+			const desired = visible ?? !previous;
+			if (session instanceof Godot4DebugSession) session.controller.set_object_property(id, "visible", desired);
+			else await session.controller.write_object_property(id, "visible", desired);
+			if (!current()) return;
+			const after = await this.inspect_object(id);
+			if (!current()) return;
+			if (object_visibility(after.variable) !== desired)
+				throw new Error(
+					"The game did not keep the requested visibility. A script may be controlling this node.",
+				);
+			const root = this.inspector.get_top_item();
+			if (root && BigInt(root.object_id ?? 0) === id) {
+				this.inspectionGeneration++;
+				this.inspector.fill_tree(root.label, after.className, id, after.variable);
+			}
+			this.refresh_scene_tree();
+		})().finally(() => {
+			if (this.visibilityRequests.get(key) !== operation) return;
+			this.visibilityRequests.delete(key);
+			if (session === this.session) this.sceneTree.set_visibility_pending(id, false);
+		});
+		this.visibilityRequests.set(key, operation);
+		return operation;
 	}
 
 	private create_godot_variable(godot_object: GodotObject): GodotVariable {

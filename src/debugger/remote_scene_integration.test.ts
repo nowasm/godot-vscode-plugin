@@ -6,6 +6,7 @@ import { GodotDebugSession as Godot3Session } from "./godot3/debug_session";
 import { GodotDebugSession as Godot4Session } from "./godot4/debug_session";
 import { GodotDebugSessionV2 as Godot4SessionV2 } from "./godot4/debug_session_v2";
 import type { SceneNode } from "./scene_tree_provider";
+import { object_visibility } from "./node_visibility";
 
 function current_debugger() {
 	assert(globals.debug);
@@ -47,6 +48,7 @@ suite("Remote UI integration - Godot 4", () => {
 	test("loads and inspects UI without a breakpoint, follows runtime mutations, and cleans up", async function () {
 		this.timeout(45000);
 		const dbg = current_debugger();
+		await dbg.set_inspector_columns_enabled(false);
 		dbg.set_scene_tree_filter("");
 		await vscode.commands.executeCommand("godotTools.activeSceneTree.focus");
 		assert(
@@ -60,6 +62,8 @@ suite("Remote UI integration - Godot 4", () => {
 			}),
 		);
 		await wait_until(() => nodes().some((node) => node.label === "PlayButton"), "initial runtime UI tree");
+		assert.equal(dbg.inspectorColumns.isOpen, false, "a disabled workspace must not open columns on launch");
+		await dbg.set_inspector_columns_enabled(true);
 		await wait_until(() => dbg.inspectorColumns.sceneVisible, "automatic inspector columns");
 		await vscode.commands.executeCommand("workbench.view.explorer");
 		await wait_until(() => !dbg.sceneTree.view.visible, "hidden debug sidebar tree");
@@ -71,6 +75,25 @@ suite("Remote UI integration - Godot 4", () => {
 		await dbg.inspect_node(button);
 		assert.equal(dbg.inspector.get_top_item()?.label, "PlayButton");
 		assert.equal(dbg.inspector.get_top_item()?.description, "Button");
+		await dbg.set_node_visibility(button, false);
+		await wait_until(() => find_node("PlayButton").is_hidden, "hidden Button");
+		assert.equal(object_visibility((await dbg.inspect_object(BigInt(button.object_id))).variable), false);
+		await dbg.set_node_visibility(button);
+		assert.equal(object_visibility((await dbg.inspect_object(BigInt(button.object_id))).variable), true);
+		const panel = find_node("Panel");
+		await dbg.set_node_visibility(panel, false);
+		await wait_until(() => find_node("PlayButton").is_hidden, "hidden ancestor");
+		assert.equal(find_node("PlayButton").local_visible, true);
+		await dbg.set_node_visibility(find_node("PlayButton"));
+		assert.equal(
+			object_visibility((await dbg.inspect_object(BigInt(button.object_id))).variable),
+			false,
+			"toggle must invert local visibility even when an ancestor is hidden",
+		);
+		await dbg.set_node_visibility(find_node("PlayButton"), true);
+		assert.equal(object_visibility((await dbg.inspect_object(BigInt(panel.object_id))).variable), false);
+		await dbg.set_node_visibility(panel, true);
+		assert.equal(dbg.inspector.get_top_item()?.label, "PlayButton", "visibility must not change selection");
 
 		const ui = find_node("RemoteUI");
 		await dbg.inspect_node(ui);
@@ -109,9 +132,27 @@ suite("Remote UI integration - Godot 4", () => {
 		assert.equal(dbg.inspector.get_top_item(), undefined, "removed selections should be cleared");
 		dbg.set_node_highlight(false);
 		dbg.set_node_highlight(true);
+		await dbg.set_inspector_columns_enabled(false);
 		await vscode.debug.stopDebugging();
 		await wait_until(() => dbg.session === undefined, "termination cleanup");
 		assert.deepEqual(dbg.sceneTree.getChildren(), []);
+		assert(
+			await vscode.debug.startDebugging(vscode.workspace.workspaceFolders?.[0], {
+				type: "godot",
+				request: "launch",
+				name: "Remember closed Inspector",
+				debug_protocol_v2: false,
+				scene: "RemoteUI.tscn",
+				additional_options: "--headless --audio-driver Dummy",
+			}),
+		);
+		const poll = setInterval(() => dbg.refresh_scene_tree(), 250);
+		try {
+			await wait_until(() => nodes().some((node) => node.label === "PlayButton"), "second debug session");
+		} finally {
+			clearInterval(poll);
+		}
+		assert.equal(dbg.inspectorColumns.isOpen, false, "closed columns must stay closed on the next debug session");
 	});
 });
 
@@ -147,6 +188,10 @@ suite("Remote object inspection - Godot 4 protocol v2", () => {
 			await dbg.inspector.expand_object(references.properties[0]);
 			assert(references.properties[0].properties.some((property) => property.value === "Play"));
 			assert.equal(dbg.inspector.get_top_item(), root);
+			const button = find_node("PlayButton");
+			await dbg.set_node_visibility(button, false);
+			assert.equal(object_visibility((await dbg.inspect_object(BigInt(button.object_id))).variable), false);
+			await dbg.set_node_visibility(button, true);
 			assert.equal(session.debug_data.last_frames.length, 0);
 		} finally {
 			clearInterval(poll);
@@ -208,10 +253,22 @@ suite("Remote UI integration - Godot 3 project", () => {
 			assert.match(owner.properties[0].label, /Circular reference/);
 			const dictionary = root.properties.find((property) => property.label.endsWith("object_dictionary"));
 			assert(dictionary);
+			const temporary = find_node("TemporaryLabel");
+			await dbg.set_node_visibility(temporary, false);
+			assert.equal(object_visibility((await dbg.inspect_object(BigInt(temporary.object_id))).variable), false);
+			await dbg.set_node_visibility(temporary, true);
+			const canvas = find_node("Canvas");
+			await dbg.set_node_visibility(canvas, false);
+			await dbg.set_node_visibility(temporary);
+			assert.equal(object_visibility((await dbg.inspect_object(BigInt(temporary.object_id))).variable), false);
+			assert.equal(object_visibility((await dbg.inspect_object(BigInt(canvas.object_id))).variable), false);
+			await dbg.set_node_visibility(canvas, true);
 			await session.controller.break();
 			await wait_until(() => session.controller.isPaused, "Godot 3 pause");
 			await dbg.inspector.expand_object(dictionary.properties[0]);
 			assert(dictionary.properties[0].properties.some((property) => property.value === 42));
+			await dbg.set_node_visibility(temporary, true);
+			assert.equal(object_visibility((await dbg.inspect_object(BigInt(temporary.object_id))).variable), true);
 			await session.controller.continue();
 			await wait_until(() => !session.controller.isPaused, "Godot 3 resume");
 			session.controller.set_object_property(BigInt(ui.object_id), "remove_child", true);

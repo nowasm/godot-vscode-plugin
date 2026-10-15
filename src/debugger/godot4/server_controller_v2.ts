@@ -109,7 +109,11 @@ export class ServerController {
 	}
 
 	public set_object_property(objectId: bigint, label: string, value: any) {
-		void this.requestData("set_object_property", [objectId, label, value], this.state.paused ? this.state.stopId : 0n).catch((error) => log.warn(error.message));
+		void this.write_object_property(objectId, label, value).catch((error) => log.warn(error.message));
+	}
+
+	public async write_object_property(objectId: bigint, label: string, value: any) {
+		await this.requestData("set_object_property", [objectId, label, value], this.state.paused ? this.state.stopId : 0n);
 	}
 
 	public async launch(args: LaunchRequestArguments) {
