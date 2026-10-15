@@ -70,7 +70,8 @@ suite("Remote scene tree", () => {
 		const node = new SceneNode("HiddenUI", "Control", 5, [], undefined, 6);
 		provider.fill_tree(node);
 		assert.equal(node.is_hidden, true);
-		assert.equal(node.local_visible, true, "the eye must use local visibility, not inherited visibility");
+		assert.equal(node.local_visible, true, "toggling must use local visibility, not inherited visibility");
+		assert.equal(node.effective_visible, false, "displayed scene state must include hidden ancestors");
 		assert.match(provider.getTreeItem(node).description as string, /hidden/);
 		assert.equal(new SceneNode("Godot3", "Control", 6, []).is_hidden, false);
 	});
@@ -104,5 +105,12 @@ suite("Remote scene tree", () => {
 		assert.equal(button.local_visible, false);
 		fixture();
 		assert.equal(provider.find_node(button.object_id)?.local_visible, true);
+	});
+
+	test("independent CanvasLayers and Windows do not require an inherited-visibility method", () => {
+		for (const type of ["CanvasLayer", "Window"]) {
+			assert.equal(new SceneNode(type, type, 5n, [], undefined, 6).effective_visible, true);
+			assert.equal(new SceneNode(type, type, 5n, [], undefined, 2).effective_visible, false);
+		}
 	});
 });

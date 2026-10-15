@@ -2,7 +2,7 @@
 	"name": "godparty-godot-tools",
 	"displayName": "GodParty Godot Tools",
 	"icon": "icon.png",
-	"version": "0.1.9",
+	"version": "0.1.10",
 	"description": "Tools for game development with Godot Engine and GDScript",
 	"repository": {
 		"type": "git",
@@ -79,6 +79,18 @@
 				"command": "godotTools.debugger.toggleNodeVisibility",
 				"title": "Toggle Node Visibility",
 				"icon": "$(eye)"
+			},
+			{
+				"category": "Godot Tools",
+				"command": "godotTools.debugger.toggleHiddenNodeVisibility",
+				"title": "Toggle Hidden Node Visibility",
+				"icon": "$(eye-closed)"
+			},
+			{
+				"category": "Godot Tools",
+				"command": "godotTools.debugger.toggleUnknownNodeVisibility",
+				"title": "Toggle Node Visibility (Unknown)",
+				"icon": "$(question)"
 			},
 			{
 				"category": "Godot Tools",
@@ -864,6 +876,14 @@
 		"menus": {
 			"commandPalette": [
 				{
+					"command": "godotTools.debugger.toggleHiddenNodeVisibility",
+					"when": "false"
+				},
+				{
+					"command": "godotTools.debugger.toggleUnknownNodeVisibility",
+					"when": "false"
+				},
+				{
 					"command": "godotTools.debugger.toggleNodeVisibility",
 					"when": "false"
 				},
@@ -1013,8 +1033,18 @@
 			"view/item/context": [
 				{
 					"command": "godotTools.debugger.toggleNodeVisibility",
-					"when": "view == godotTools.activeSceneTree && viewItem =~ /^remote_node_(visible|hidden|unknown)$/",
+					"when": "view == godotTools.activeSceneTree && viewItem == remote_node_visible",
 					"group": "inline@0"
+				},
+				{
+					"command": "godotTools.debugger.toggleHiddenNodeVisibility",
+					"when": "view == godotTools.activeSceneTree && viewItem == remote_node_hidden",
+					"group": "inline@0"
+				},
+				{
+					"command": "godotTools.debugger.toggleUnknownNodeVisibility",
+					"when": "view == godotTools.activeSceneTree && viewItem == remote_node_unknown",
+				"group": "inline@0"
 				},
 				{
 					"command": "godotTools.debugger.showNode",

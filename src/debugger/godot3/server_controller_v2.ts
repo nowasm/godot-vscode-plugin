@@ -9,7 +9,7 @@ import { ansi, convert_resource_path_to_uri, createLogger, get_configuration, ge
 import { prompt_for_godot_executable } from "../../utils/prompts";
 import { killSubProcesses, subProcess } from "../../utils/subspawn";
 import { LaunchRequestArguments, AttachRequestArguments, pinnedScene } from "../debugger";
-import { parse_next_scene_node } from "./helpers";
+import { parse_scene_snapshot } from "./helpers";
 import { DebugChannelV2, DebugEnvelopeV2, DebugPacketStreamV2, encodeEnvelopeV2 } from "./protocol_v2";
 import { DebugChannelPairerV2, DebugSessionStateV2, ExecutionCommandV2 } from "./session_state_v2";
 import type { GodotDebugSession } from "./debug_session";
@@ -114,7 +114,7 @@ export class ServerController {
 		this.sceneTreeRequestPending = true;
 		void this.requestData("scene_snapshot", [], this.state.paused ? this.state.stopId : 0n).then((message) => {
 			const treeData = message.payload[1];
-			if (Array.isArray(treeData)) this.session.sceneTree.fill_tree(parse_next_scene_node(treeData));
+			if (Array.isArray(treeData)) this.session.sceneTree.fill_tree(parse_scene_snapshot(message.payload));
 		}).catch((error) => log.warn(error.message)).finally(() => { this.sceneTreeRequestPending = false; });
 	}
 

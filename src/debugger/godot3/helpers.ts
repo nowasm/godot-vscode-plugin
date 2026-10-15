@@ -15,6 +15,27 @@ export function parse_next_scene_node(params: any[], ofs: { offset: number } = {
 	return new SceneNode(name, className, id, children);
 }
 
+/** Optional visibility metadata leaves older four-field node snapshots compatible. */
+export function parse_scene_snapshot(payload: any[]): SceneNode {
+	const root = parse_next_scene_node(payload[1]);
+	const values = payload[2];
+	if (!Array.isArray(values) || values.length % 2 !== 0) return root;
+	const flags = new Map<string, number>();
+	for (let index = 0; index < values.length; index += 2) {
+		const id = values[index];
+		const flag = values[index + 1];
+		if ((typeof id !== "bigint" && !(typeof id === "number" && Number.isSafeInteger(id))) || id < 0) return root;
+		if (typeof flag !== "number" || ![0, 2, 6, 14].includes(flag) || flags.has(id.toString())) return root;
+		flags.set(id.toString(), flag);
+	}
+	const apply = (node: SceneNode) => {
+		node.view_flags = flags.get(node.object_id.toString());
+		for (const child of node.children) apply(child);
+	};
+	apply(root);
+	return root;
+}
+
 export function split_buffers(buffer: Buffer) {
 	let len = buffer.byteLength;
 	let offset = 0;

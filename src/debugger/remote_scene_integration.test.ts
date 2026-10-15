@@ -207,6 +207,63 @@ suite("Remote object inspection - Godot 4 protocol v2", () => {
 const godot3 = process.env.GODOT_TOOLS_TEST_GODOT3;
 const godot3Project = process.env.GODOT_TOOLS_TEST_GODOT3_PROJECT;
 suite("Remote UI integration - Godot 3 project", () => {
+	test("gets initial and script-driven visibility from compact snapshots without inspecting nodes", async function () {
+		if (!godot3 || process.env.GODOT_TOOLS_TEST_SCENE_VISIBILITY !== "true") return this.skip();
+		this.timeout(30000);
+		await vscode.extensions.getExtension("godparty.godparty-godot-tools")?.activate();
+		const dbg = current_debugger();
+		const session = new Godot3Session();
+		const project = path.resolve(__dirname, "../../test_projects/test-dap-project-godot3-v2");
+		session.sceneTree = dbg.sceneTree;
+		session.inspector = dbg.inspector;
+		session.debug_data.projectPath = project;
+		dbg.session = session;
+		const poll = setInterval(() => session.controller.request_scene_tree(), 100);
+		try {
+			await session.controller.launch({
+				address: "127.0.0.1",
+				port: -1,
+				project,
+				editor_path: godot3,
+				scene: "Visibility.tscn",
+				additional_options: "--no-window --audio-driver Dummy",
+			} as any);
+			await wait_until(() => nodes().some((node) => node.label === "SpatialChild"), "visibility fixture");
+			assert.equal(find_node("InitiallyHidden").local_visible, false);
+			assert.equal(find_node("InitiallyHidden").effective_visible, false);
+			for (const name of ["InheritedHidden", "LayerChild", "SpatialChild"]) {
+				assert.equal(find_node(name).local_visible, true, name);
+				assert.equal(find_node(name).effective_visible, false, name);
+				assert.equal(dbg.sceneTree.getTreeItem(find_node(name)).contextValue, "remote_node_hidden", name);
+			}
+			assert.equal(find_node("HiddenLayer").local_visible, false);
+			assert.equal(find_node("VisibleLayer").effective_visible, true);
+			assert.equal(find_node("TopLevelVisible").effective_visible, true);
+			const ui = find_node("Visibility");
+			await session.controller.write_object_property(BigInt(ui.object_id), "reveal_initially_hidden", true);
+			await wait_until(() => find_node("InitiallyHidden").effective_visible === true, "script shows node");
+			await session.controller.write_object_property(BigInt(ui.object_id), "reveal_initially_hidden", false);
+			await wait_until(() => find_node("InitiallyHidden").effective_visible === false, "script hides node again");
+			assert.equal(dbg.inspector.has_tree(), false, "initial visibility requires no object inspection");
+			await session.controller.break();
+			await wait_until(() => session.controller.isPaused, "paused visibility fixture");
+			await session.controller.write_object_property(
+				BigInt(find_node("InitiallyHidden").object_id),
+				"visible",
+				true,
+			);
+			await wait_until(() => find_node("InitiallyHidden").effective_visible === true, "paused snapshot");
+			await session.controller.continue();
+			await wait_until(() => find_node("InitiallyHidden").effective_visible === false, "resumed script hiding");
+		} finally {
+			clearInterval(poll);
+			session.dispose();
+			dbg.session = undefined;
+			dbg.sceneTree.clear();
+			dbg.inspector.clear();
+		}
+	});
+
 	test("expands real Godot 3 array/dictionary objects and handles cycles and released objects", async function () {
 		if (!godot3) return this.skip();
 		this.timeout(30000);

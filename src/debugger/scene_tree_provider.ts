@@ -139,22 +139,26 @@ export class SceneTreeProvider implements TreeDataProvider<SceneNode>, Disposabl
 
 		tree_item.id = element.object_id.toString();
 		tree_item.contextValue = element.can_change_visibility
-			? `remote_node_${element.local_visible === undefined ? "unknown" : element.local_visible ? "visible" : "hidden"}`
+			? `remote_node_${element.effective_visible === undefined ? "unknown" : element.effective_visible ? "visible" : "hidden"}`
 			: "remote_node";
 		tree_item.command = {
 			command: "godotTools.debugger.inspectNode",
 			title: "Inspect Remote Node",
 			arguments: [element],
 		};
-		tree_item.description = `${element.class_name}${element.is_hidden ? " · hidden" : ""}`;
+		tree_item.description = `${element.class_name}${element.is_hidden ? (element.local_visible ? " · hidden by ancestor" : " · hidden") : ""}`;
 		tree_item.iconPath = element.iconPath;
 		tree_item.tooltip = [
 			element.node_path,
 			element.class_name,
 			`Object ID: ${element.object_id}`,
-			element.is_hidden ? "Hidden in the running scene" : undefined,
-			element.can_change_visibility && element.local_visible === undefined
-				? "Visibility is read on demand"
+			element.is_hidden
+				? element.local_visible
+					? "Hidden by an ancestor; own visibility is on"
+					: "Hidden in the running scene"
+				: undefined,
+			element.can_change_visibility && element.effective_visible === undefined
+				? "Scene visibility is not provided by this engine"
 				: undefined,
 			element.scene_file_path,
 		]
@@ -184,9 +188,15 @@ export class SceneNode extends TreeItem {
 	}
 
 	public get is_hidden(): boolean {
-		return this.view_flags !== undefined
-			? (this.view_flags & 2) !== 0 && (this.view_flags & 8) === 0
-			: this.confirmed_visible === false;
+		return this.effective_visible === false;
+	}
+
+	public get effective_visible(): boolean | undefined {
+		if (this.local_visible === false) return false;
+		if (this.view_flags === undefined || (this.view_flags & 2) === 0) return undefined;
+		// Standard Godot 4 has no in-tree method for these independent surfaces.
+		if (["CanvasLayer", "Window"].includes(this.class_name)) return this.local_visible;
+		return (this.view_flags & 8) !== 0;
 	}
 
 	constructor(

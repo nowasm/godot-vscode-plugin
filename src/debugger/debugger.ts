@@ -132,6 +132,12 @@ export class GodotDebugger implements DebugAdapterDescriptorFactory, DebugConfig
 			register_command("debugger.closeInspectorColumns", () => this.set_inspector_columns_enabled(false)),
 			register_command("debugger.toggleInspectorColumns", () => this.toggle_inspector_columns()),
 			register_command("debugger.toggleNodeVisibility", (node: SceneNode) => this.set_node_visibility(node)),
+			register_command("debugger.toggleHiddenNodeVisibility", (node: SceneNode) =>
+				this.set_node_visibility(node),
+			),
+			register_command("debugger.toggleUnknownNodeVisibility", (node: SceneNode) =>
+				this.set_node_visibility(node),
+			),
 			register_command("debugger.showNode", (node: SceneNode) => this.set_node_visibility(node, true)),
 			register_command("debugger.hideNode", (node: SceneNode) => this.set_node_visibility(node, false)),
 			register_command("debugger.filterSceneTree", this.filter_scene_tree.bind(this)),

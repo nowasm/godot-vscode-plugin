@@ -38,6 +38,7 @@ export interface ColumnRow {
 	hidden?: boolean;
 	canChangeVisibility?: boolean;
 	visible?: boolean;
+	effectiveVisible?: boolean;
 	visibilityPending?: boolean;
 	icon?: string;
 	editable?: boolean;
@@ -210,6 +211,7 @@ export class InspectorColumns implements Disposable {
 			hidden: node.is_hidden,
 			canChangeVisibility: node.can_change_visibility,
 			visible: node.local_visible,
+			effectiveVisible: node.effective_visible,
 			visibilityPending: node.visibility_pending,
 			icon: webview
 				?.asWebviewUri(

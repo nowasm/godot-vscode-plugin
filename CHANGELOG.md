@@ -1,5 +1,11 @@
 # Changelog
 
+### 0.1.10 — GodParty fork
+
+- Correct initial and script-driven node visibility on the updated custom Godot 3 v2 engine. Read compact local/effective visibility flags with each scene snapshot instead of waiting for explicit object inspection.
+- Show a closed eye for hidden nodes, distinguish hidden ancestors while preserving the node's own visible property, and show a question mark for unavailable scene visibility on older engine binaries. Apply the same states to the editor column and sidebar.
+- Preserve the original Godot 3 tree record layout and accept optional snapshot metadata. Fresh snapshots supersede old Inspector confirmations without fetching every node's properties.
+
 ### 0.1.9 — GodParty fork
 
 - Toggle both Inspector editor columns from the debug toolbar, `Godot UI: On/Off` status-bar entry, Command Palette, or either column's close control. Remember the choice per workspace; columns start off unless enabled.
